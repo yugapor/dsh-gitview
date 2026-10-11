@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Syntax, tests and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install the test-only YAML parser
+        run: npm install --prefix "$RUNNER_TEMP/dsh-gitview-test-deps" --no-save --ignore-scripts --package-lock=false --no-audit --no-fund js-yaml@4.3.2
+      - name: Check syntax
+        run: npm run check
+      - name: Run all tests
+        run: npm test
+        env:
+          NODE_PATH: ${{ runner.temp }}/dsh-gitview-test-deps/node_modules
+      - name: Install the declared DSH runtime and package manager
+        run: npm install --global @deepseek-ai/dsh@0.2.0-rc.2 pnpm@10.34.6
+      - name: Build and verify the installable package
+        run: npm run test:package
+        env:
+          NODE_PATH: ${{ runner.temp }}/dsh-gitview-test-deps/node_modules
+      - name: Save the verified package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dsh-gitview-package
+          path: dist/*.tgz
+          if-no-files-found: error
+          retention-days: 14

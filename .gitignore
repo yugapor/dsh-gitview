@@ -1,0 +1,14 @@
+# OS / editor noise
+.DS_Store
+*.swp
+*~
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+pnpm-debug.log*
+
+# The install script validates the composed profile with `dsh --dump-config`,
+# which writes its transcript to /tmp; nothing generated should land here.
+*.dump.txt

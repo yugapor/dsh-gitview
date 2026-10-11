@@ -1,0 +1,3 @@
+- insert:
+    - id: git-tree
+      name: dsh-gitview

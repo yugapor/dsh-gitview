@@ -1,0 +1,79 @@
+{
+  "name": "dsh-gitview",
+  "version": "0.1.0",
+  "description": "Git changes, diffs, history and CI in the DeepSeek Harness sidebar.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yugapor/dsh-gitview.git"
+  },
+  "homepage": "https://github.com/yugapor/dsh-gitview#readme",
+  "bugs": "https://github.com/yugapor/dsh-gitview/issues",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/git.js",
+    "lib/ci.js",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node tools/git-parse-test.mjs && node tools/git-e2e-test.mjs && node tools/git-integration-test.mjs && node tools/host-git-test.mjs && node tools/ci-test.mjs && node tools/smoke-test.mjs && node tools/client-render-test.mjs && node tools/install-test.mjs",
+    "test:git": "node tools/git-parse-test.mjs",
+    "test:e2e": "node tools/git-e2e-test.mjs",
+    "test:host": "node tools/host-git-test.mjs",
+    "test:integration": "node tools/git-integration-test.mjs",
+    "test:client": "node tools/smoke-test.mjs",
+    "test:render": "node tools/client-render-test.mjs",
+    "test:install": "node tools/install-test.mjs",
+    "test:package": "node tools/package-test.mjs",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/git.js && node --check lib/ci.js",
+    "install-profile": "bash tools/install-into-profile.sh"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "git",
+    "sidebar"
+  ],
+  "engines": {
+    "node": ">=24",
+    "dsh": "0.2.0-rc.2"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-client-locale": "~0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "~0.2.0-rc.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}
