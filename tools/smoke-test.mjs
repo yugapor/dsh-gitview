@@ -641,7 +641,7 @@ const SHELL_TOKENS = [
 ];
 
 /** The sheet itself, pulled out of the bundle the way the browser receives it. */
-const SHEET = /const CSS = `([\s\S]*?)`;/.exec(source)[1];
+const SHEET = /(?:const|var) CSS = `([\s\S]*?)`;/.exec(source)[1];
 
 await check("the stylesheet names only custom properties the shell really defines", () => {
 	const named = new Set([...source.matchAll(/var\((--[a-z0-9-]+)/g)].map((match) => match[1]));

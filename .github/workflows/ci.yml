@@ -23,6 +23,8 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      - name: Install the build toolchain
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install the test-only YAML parser
         run: npm install --prefix "$RUNNER_TEMP/dsh-gitview-test-deps" --no-save --ignore-scripts --package-lock=false --no-audit --no-fund js-yaml@4.3.2
       - name: Check syntax

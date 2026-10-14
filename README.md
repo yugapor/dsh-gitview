@@ -34,8 +34,12 @@ Commit-message generation sends **staged changes** to the selected model provide
 
 ## Development
 
+The browser half is written in `src/client/` and built into `lib/client.js`, which is committed because the Host serves it verbatim:
+
 ```sh
-npm run check
+npm ci
+npm run build   # src/client → lib/client.js
+npm run check   # types, a stale-build check, syntax
 npm test
 ```
 
