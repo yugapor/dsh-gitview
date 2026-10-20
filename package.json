@@ -1,6 +1,6 @@
 {
   "name": "dsh-gitview",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Git changes, diffs, history and CI in the DeepSeek Harness sidebar.",
   "repository": {
     "type": "git",
@@ -29,6 +29,7 @@
     "README.md"
   ],
   "scripts": {
+    "build": "node tools/build-client.mjs",
     "test": "node tools/git-parse-test.mjs && node tools/git-e2e-test.mjs && node tools/git-integration-test.mjs && node tools/host-git-test.mjs && node tools/ci-test.mjs && node tools/smoke-test.mjs && node tools/client-render-test.mjs && node tools/install-test.mjs",
     "test:git": "node tools/git-parse-test.mjs",
     "test:e2e": "node tools/git-e2e-test.mjs",
@@ -38,7 +39,7 @@
     "test:render": "node tools/client-render-test.mjs",
     "test:install": "node tools/install-test.mjs",
     "test:package": "node tools/package-test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/git.js && node --check lib/ci.js",
+    "check": "tsc -p . && node tools/build-client.mjs --check && node --check lib/index.js && node --check lib/client.js && node --check lib/git.js && node --check lib/ci.js",
     "install-profile": "bash tools/install-into-profile.sh"
   },
   "keywords": [
@@ -75,5 +76,14 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+    "@types/react": "18.3.31",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
 }

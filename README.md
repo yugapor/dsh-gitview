@@ -7,6 +7,7 @@ A Git panel for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 - Commit graph, branches, blame and reflog
 - CI status for GitHub, GitLab and Gitea; step details for GitHub Actions
 - Optional commit-message generation using the session's selected model
+- A wide **Git** tab beside Chat and Trajectory, with a Review mode (stage, commit, side-by-side diff) and a Repository mode (history, branches, CI)
 
 ## Install
 
@@ -16,13 +17,17 @@ Requires DSH **0.2.0-rc.2**, Node.js **24+**, Git and pnpm. Other DSH versions a
 dsh plugin --profile web add dsh-gitview
 ```
 
-Restart DSH with your existing options and port, then open **Git** in the right sidebar. Do not enable an older manually installed Git panel alongside this package.
+Restart DSH with your existing options and port, then open **Git** in the right sidebar or as a tab beside Chat and Trajectory. Do not enable an older manually installed Git panel alongside this package.
 
 To remove:
 
 ```sh
 dsh plugin --profile web remove dsh-gitview
 ```
+
+## Placement
+
+Settings → General → **Git view placement** chooses the right sidebar, the conversation tab, or both (default). The choice is stored per browser, not per user or session.
 
 ## CI and AI
 
@@ -34,8 +39,12 @@ Commit-message generation sends **staged changes** to the selected model provide
 
 ## Development
 
+The browser half is written in `src/client/` and built into `lib/client.js`, which is committed because the Host serves it verbatim:
+
 ```sh
-npm run check
+npm ci
+npm run build   # src/client → lib/client.js
+npm run check   # types, a stale-build check, syntax
 npm test
 ```
 
