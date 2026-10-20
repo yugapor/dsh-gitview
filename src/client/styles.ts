@@ -157,6 +157,135 @@ export const CSS = `
 .gt_blameUncommitted { color: var(--dsw-alias-state-warn-label); }
 @container (max-width: 340px) { .gt_commitRow { flex-wrap: wrap; } .gt_commitRow .gt_input { flex-basis: 100% !important; } .gt_commitRow button { width: 100%; } }
 @container (max-width: 420px) { .gt_diffStat { display: none; } }
+
+.gt_wView { container: gt-view / inline-size; overflow: hidden; box-sizing: border-box; height: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; flex: auto; color: var(--dsw-alias-label-primary); font-size: var(--dsh-content-font-size-secondary, 13px); line-height: 1.5; }
+.gt_wHead { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 8px 12px 8px 16px; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.gt_wRepo { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gt_wBranch { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.gt_wNote { color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxs-12); white-space: nowrap; flex: none; }
+.gt_wRepoPath { color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxs-12); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 2 auto; }
+.gt_wHeadEnd { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
+.gt_wCi { display: inline-flex; align-items: center; gap: 6px; font: var(--dsw-font-xxs-12); }
+
+.gt_wReview, .gt_wRepository { flex: 1 1 auto; min-height: 0; display: grid; position: relative; }
+.gt_wReview { grid-template-columns: minmax(248px, 300px) minmax(0, 1fr); }
+.gt_wRepository { grid-template-columns: minmax(208px, 248px) minmax(0, 1fr) auto; }
+.gt_wRail { min-height: 0; min-width: 0; display: flex; flex-direction: column; border-right: .5px solid var(--dsw-alias-border-l2); }
+.gt_wRailHead { flex: none; display: flex; align-items: center; gap: 2px; padding: 12px 8px 4px 16px; }
+.gt_wRailTitle { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; }
+.gt_wFilter { flex: none; padding: 4px 12px 6px; }
+.gt_wFilter .gt_input, .gt_wListHead .gt_input { padding: 6px 10px; font: var(--dsw-font-xxs-12); }
+.gt_wRailBody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 8px 8px; scrollbar-gutter: stable; }
+.gt_wRail .gt_group { border: 0; border-radius: 0; margin: 0 0 6px; padding: 0; }
+.gt_wRail .gt_section { position: sticky; top: 0; z-index: 1; background: var(--dsw-alias-bg-layer-1); padding: 10px 8px 4px; }
+.gt_wRail .gt_row { padding: 4px 8px; }
+.gt_wView .gt_row[aria-current=true] { box-shadow: none; background: var(--dsw-alias-interactive-bg-hover); }
+.gt_wView .gt_row[aria-current=true] .gt_name, .gt_wView .gt_row[aria-current=true] .gt_wSubjectText { font-weight: 600; }
+.gt_wKeys { flex: none; margin: 0; padding: 6px 16px 0; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.gt_wRemotes > summary { cursor: pointer; list-style: none; }
+.gt_wRemotes > summary::-webkit-details-marker { display: none; }
+.gt_wBranchRow:disabled { cursor: default; color: var(--dsw-alias-label-secondary); }
+.gt_wBranchRow:disabled:hover { background: 0 0; }
+.gt_wHere { margin: 10px 0 12px; padding: 6px 4px 4px; border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); }
+.gt_wHereTitle { padding: 2px 8px 4px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.gt_wHereBranch { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 8px; font-weight: 600; }
+.gt_wTrack { flex: none; margin-left: auto; display: inline-flex; gap: 6px; font: var(--dsw-font-xxxs-11); font-weight: 500; font-variant-numeric: tabular-nums; }
+.gt_wHereSub { padding: 0 8px 4px 28px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxs-12); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gt_wHere .gt_row { padding: 4px 8px; }
+.gt_wHere .gt_row > .gt_count { flex: none; margin-left: auto; font: var(--dsw-font-xxxs-11); }
+.gt_wHere .gt_row:disabled { cursor: default; }
+.gt_wHere .gt_row:disabled:hover { background: 0 0; }
+.gt_wHereCheck { padding-left: 20px !important; }
+
+.gt_wCommit { flex: none; display: flex; flex-direction: column; gap: 6px; margin: 2px 12px 8px; }
+.gt_wMessageBox { position: relative; border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-2); transition: border-color .15s cubic-bezier(.16, 1, .3, 1); }
+.gt_wMessageBox:focus-within { border-color: var(--dsw-alias-border-l1); }
+.gt_wMessage { box-sizing: border-box; display: block; width: 100%; min-height: 34px; max-height: 160px; margin: 0; padding: 7px 36px 7px 10px; border: 0; outline: none; resize: none; background: transparent; color: inherit; font: inherit; line-height: 1.45; field-sizing: content; }
+.gt_wMessage::placeholder { color: var(--dsw-alias-label-tertiary); }
+.gt_wGenerate { position: absolute; top: 3px; right: 3px; }
+.gt_wCommitButton { width: 100%; justify-content: center; }
+.gt_wCommitMeta { display: flex; flex-direction: column; gap: 2px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxs-12); }
+
+.gt_wMain { container: gt-main / inline-size; position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.gt_wDoc { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.gt_wDocHead { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; padding: 8px 12px 8px 16px; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.gt_wDocHead > .gt_wPath { flex: 1 1 160px; }
+.gt_wPath { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gt_wDir { color: var(--dsw-alias-label-tertiary); }
+.gt_wFile { font-weight: 600; }
+.gt_wTools { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; margin-left: auto; }
+.gt_wTools > .gt_meta { gap: 2px; font-variant-numeric: tabular-nums; }
+.gt_wTools button[aria-pressed=true] { background: var(--dsw-alias-interactive-bg-hover); }
+.gt_wTools button[aria-pressed=true] .gt_icon { color: var(--dsw-alias-label-primary); }
+.gt_wDocBody { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.gt_wDocBody .gt_patch { padding: 6px 0 24px; }
+.gt_wEmpty { margin: auto; max-width: 44ch; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 48px 24px; text-align: center; color: var(--dsw-alias-label-secondary); }
+.gt_wEmpty p { margin: 0; }
+.gt_wEmpty .gt_wEmptyTitle { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.gt_wEmpty button { margin-top: 12px; }
+
+.gt_wListHead { flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.gt_wListHead .gt_input { flex: 0 1 300px; width: auto; }
+.gt_wListHead > .gt_meta { margin-left: auto; font-variant-numeric: tabular-nums; }
+.gt_wLedger { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 8px 16px; scrollbar-gutter: stable; }
+.gt_wLedgerRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 132px) 64px 40px; column-gap: 16px; min-height: 34px; padding-top: 0; padding-bottom: 0; }
+.gt_wLedgerRow[data-ahead=true] .gt_wSubjectText { font-weight: 500; }
+.gt_wLedgerRow[data-head=true] { background: var(--dsw-alias-bg-layer-2); }
+.gt_wJump { position: absolute; left: 50%; z-index: 2; display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border: .5px solid var(--dsw-alias-border-l2); border-radius: 999px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: var(--dsw-font-xxs-12); cursor: pointer; box-shadow: 0 4px 14px rgb(0 0 0 / .18); transform: translateX(-50%); animation: gt_wRise .2s cubic-bezier(.16, 1, .3, 1); }
+.gt_wJump[data-place=below] { bottom: 16px; }
+.gt_wJump[data-place=above] { top: 64px; }
+.gt_wJump:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.gt_wJump:focus-visible { outline: 2px solid var(--dsw-alias-link); outline-offset: 2px; }
+@keyframes gt_wRise { from { opacity: 0; transform: translate(-50%, 6px); } }
+@media (prefers-reduced-motion: reduce) { .gt_wJump { animation: none; } }
+/* Refs give way before the subject does, and nothing paints into the next column. */
+.gt_wSubject { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.gt_wSubject > :not(.gt_wSubjectText) { flex: 0 1 auto; min-width: 0; max-width: 60%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gt_wSubjectText { flex: 1 1 0; min-width: 8ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gt_wAuthor { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxs-12); }
+.gt_wLedgerRow .gt_time { margin-left: 0; text-align: right; }
+
+.gt_wInspector { width: min(560px, 46cqw); min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: .5px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); animation: gt_wReveal .24s cubic-bezier(.16, 1, .3, 1); }
+.gt_wInspector[data-kind=commit] { width: min(760px, 56cqw); }
+/* VS Code's flat list: the name, then its folder, quiet; git's letter last; actions on hover. */
+.gt_wFileRow { padding-top: 3px; padding-bottom: 3px; }
+.gt_wFileRow > .gt_name { flex: 0 1 auto; }
+.gt_wFileRow > .gt_wDir { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--dsw-font-xxs-12); }
+.gt_wFileRow > .gt_change { flex: none; width: 1.2em; text-align: center; font-weight: 600; }
+.gt_wFileRow > .gt_actions { visibility: hidden; }
+.gt_wFileRow:hover > .gt_actions, .gt_wFileRow:focus-within > .gt_actions, .gt_wFileRow[aria-current=true] > .gt_actions { visibility: visible; }
+.gt_wCommitFiles { position: relative; padding: 2px 0 6px; }
+.gt_wCommitFiles .gt_wFileRow { padding-left: 6px; }
+.gt_wCommitFiles > .gt_note { padding-left: 6px; }
+.gt_wLanes { position: absolute; top: 0; bottom: 0; pointer-events: none; overflow: hidden; }
+@keyframes gt_wReveal { from { opacity: 0; transform: translateX(16px); } }
+@media (prefers-reduced-motion: reduce) { .gt_wInspector { animation: none; } }
+.gt_wInspectHead { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 14px 12px 12px 16px; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.gt_wInspectTitle { display: flex; align-items: flex-start; gap: 8px; }
+.gt_wInspectTitle strong { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; text-wrap: pretty; }
+.gt_wInspectBody { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.gt_wInspectBody > .gt_ciView { overflow: visible; padding: 12px 16px; }
+.gt_wFileHead { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 16px; background: var(--dsw-alias-bg-layer-1); border-bottom: .5px solid var(--dsw-alias-border-l3); font: var(--dsw-font-xxs-12); }
+.gt_wFileHead > .gt_wPath { flex: 1; }
+
+/* The ledger answers to its own width, which the inspector takes from. */
+@container gt-main (max-width: 680px) { .gt_wLedgerRow { grid-template-columns: minmax(0, 1fr) 64px 40px; } .gt_wLedgerRow .gt_wAuthor { display: none; } }
+@container gt-main (max-width: 460px) { .gt_wLedgerRow { grid-template-columns: minmax(0, 1fr) 40px; } .gt_wLedgerRow .gt_sha { display: none; } }
+@container gt-view (max-width: 760px) {
+	.gt_wHead { grid-template-columns: minmax(0, 1fr) auto; }
+	.gt_wHeadEnd { display: none; }
+	.gt_wReview, .gt_wRepository { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+	.gt_wRail { max-height: 40vh; border-right: 0; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+	.gt_wInspector { position: absolute; inset: 0; z-index: 2; width: auto; border-left: 0; }
+}
+
+.gt_setRow { display: flex; align-items: center; gap: 8px; padding: 16px 0; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.gt_setText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-right: 48px; }
+.gt_setTitle { color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 22px; }
+.gt_setDesc { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
+.gt_setSelector { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px; border: none; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
+.gt_setSelector:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.gt_setSelector:focus-visible { outline: 2px solid var(--dsw-alias-link); outline-offset: 2px; }
 `;
 
 /** The document this bundle is running in, when there is one. */

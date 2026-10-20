@@ -284,6 +284,14 @@ const primitives = {
 	FileTypeIcon: marker("FileTypeIcon"),
 	IconFolderOpenRegular: marker("IconFolderOpenRegular"),
 	IconFolderCloseRegular: marker("IconFolderCloseRegular"),
+	IconChevronDownOutlineRegular: marker("IconChevronDownOutlineRegular"),
+	IconCompareSplitOutlineRegular: marker("IconCompareSplitOutlineRegular"),
+	IconCheckOutlineRegular: marker("IconCheckOutlineRegular"),
+	IconFlatListOutlineRegular: marker("IconFlatListOutlineRegular"),
+	IconSparkleRegular: marker("IconSparkleRegular"),
+	IconWorkspaceTreeOutlineRegular: marker("IconWorkspaceTreeOutlineRegular"),
+	SegmentedControl: marker("SegmentedControl"),
+	Menu: marker("Menu"),
 	languageForPath: (path) => path.endsWith(".js") ? "javascript" : undefined,
 	useCodeHighlighter: (language) => (code) => {
 		highlights.push({ language, code });
@@ -311,7 +319,7 @@ const internals = mod.__internals;
 // Register through a recording context, mostly to capture the real dictionary: the
 // tests substitute real English copy, which exercises the `{n}` placeholders too.
 let dictionary = null;
-let registeredSpec = null;
+const registered = {};
 mod.apply({
 	effect: (fn) => {
 		fn();
@@ -328,13 +336,15 @@ mod.apply({
 	slots: {
 		inject: (name, register) => register(),
 		register: (spec) => {
-			registeredSpec = spec;
-			return () => {};
+			registered[spec.name] = spec;
+			return () => {
+				if (registered[spec.name] === spec) delete registered[spec.name];
+			};
 		}
 	}
 });
 const t = (key) => dictionary[key] ?? key;
-const business = registeredSpec.inject();
+const business = registered["sidebar.right.pane.tab"].inject();
 
 //#endregion
 
@@ -2069,4 +2079,211 @@ await check("split panes synchronize horizontal scroll, clamp short sides, and i
 	sides[1].props.onScroll({ currentTarget: right }); assert.equal(left.scrollLeft, 150);
 	right.scrollLeft = 20; sides[1].props.onScroll({ currentTarget: right }); assert.equal(left.scrollLeft, 20);
 });
+//#region the conversation view
+
+/** Mount the conversation view against the same scripted routes as the tab body. */
+function mountWide(options = {}) {
+	mount(options).driver.unmount();
+	requests.length = 0;
+	const props = {
+		sessionId: "session-1",
+		useSessions: (selector) => selector({ byId: { "session-1": { cwd: "/repo" } } }),
+		t,
+		...registered["conversation.view"].inject("session-1"),
+		askAI: () => true
+	};
+	const driver = createDriver(internals.GitWideView, props, (tree) => renderDeep(tree));
+	mountedApp = { driver };
+	return {
+		driver,
+		async settle() { await driver.settle(); return renderDeep(driver.tree); },
+		get deep() { return renderDeep(driver.tree); },
+		get keys() { return requests.map((request) => request.key); },
+		get requests() { return requests; },
+		async click(tree, label) {
+			const found = button(tree, label);
+			assert.ok(found, `no button labelled "${label}"`);
+			found.props.onClick({ stopPropagation() {} });
+			return this.settle();
+		},
+		async mode(value) {
+			const control = primitivesNamed(this.deep, "SegmentedControl").find((node) => node.props.id.startsWith("gt-mode-"));
+			control.props.onChange(value);
+			return this.settle();
+		},
+		async key(name) {
+			const view = collect(this.deep).find((node) => node.props.className === "gt_wView");
+			view.props.onKeyDown({ key: name, target: { tagName: "DIV" }, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, preventDefault() {} });
+			return this.settle();
+		}
+	};
+}
+const diffRequests = (app) => app.requests.filter((request) => request.key === "GET api/git.diff").map((request) => Object.fromEntries(new URL(request.url, "http://x/").searchParams));
+
+await check("the conversation view opens on Review with the first file's patch already loaded", async () => {
+	const app = mountWide();
+	const tree = await app.settle();
+	// Sections run conflicted, staged, unstaged, untracked: the staged file leads.
+	assert.deepEqual(diffRequests(app).at(-1), { sessionId: "session-1", path: "staged.txt", scope: "index" });
+	assert.ok(collect(tree).some((node) => node.props.className === "gt_wDoc"), "the patch fills the main area");
+	assert.ok(button(tree, "Commit"), "the commit card sits under the files");
+	assert.equal(new Set(app.driver.counts).size, 1, "the hook order is identical on every render");
+});
+
+await check("J and K walk the files in drawn order, and S stages only what is unstaged", async () => {
+	const app = mountWide();
+	await app.settle();
+	await app.key("j");
+	assert.deepEqual(diffRequests(app).at(-1), { sessionId: "session-1", path: "src/a.js", scope: "worktree" });
+	await app.key("u");
+	assert.equal(app.keys.includes("POST api/git.mutate"), false, "U on an unstaged file does nothing");
+	await app.key("s");
+	assert.deepEqual(app.requests.find((request) => request.key === "POST api/git.mutate").body, { action: "stage", paths: ["src/a.js"] });
+});
+
+await check("a clean working tree points at Repository instead of an empty pane", async () => {
+	const app = mountWide({ status: { ...STATUS, changed: 0, tree: { ...STATUS.tree, children: [], counts: {}, total: 0 } } });
+	const tree = await app.settle();
+	assert.match(text(tree), /Working tree clean\./);
+	await app.click(tree, "Open Repository");
+	assert.ok(app.keys.includes("GET api/git.history"), "Repository reads the history");
+});
+
+await check("Repository expands a commit in place, VS Code style, and a file opens its change on the right", async () => {
+	const patch = "diff --git a/src/a.js b/src/a.js\nindex 1..2 100644\n--- a/src/a.js\n+++ b/src/a.js\n@@ -1 +1,2 @@\n-old\n+new\n+more\ndiff --git a/img.png b/img.png\nBinary files a/img.png and b/img.png differ\n";
+	const app = mountWide({ diff: { kind: "ready", text: patch, truncated: false } });
+	await app.settle();
+	let tree = await app.mode("repository");
+	assert.ok(app.keys.includes("GET api/git.branches"));
+	const rows = () => collect(app.deep).filter((node) => node.props.className === "gt_row gt_wLedgerRow");
+	assert.equal(rows().length, 3);
+	rows()[1].props.onClick();
+	tree = await app.settle();
+	assert.deepEqual(diffRequests(app).at(-1), { sessionId: "session-1", scope: "commit", rev: HISTORY.commits[1].sha });
+	assert.equal(rows()[1].props["aria-expanded"], true);
+	const files = collect(tree).find((node) => node.props.className === "gt_wCommitFiles");
+	const fileRows = collect(files).filter((node) => node.props.className === "gt_row gt_wFileRow");
+	assert.equal(fileRows.length, 2, "the commit's files open under its row");
+	assert.match(text(fileRows[0]), /a\.jssrc\+2−1/, "name, quiet folder, then counts from the hunks");
+	assert.equal(collect(tree).some((node) => node.props.className === "gt_wInspector"), false, "nothing opens on the right until a file is chosen");
+	const before = diffRequests(app).length;
+	fileRows[0].props.onClick();
+	tree = await app.settle();
+	const inspector = collect(tree).find((node) => node.props.className === "gt_wInspector");
+	assert.equal(inspector.props["data-kind"], "commit");
+	assert.match(text(inspector), /\+new/, "the chosen file's change, from the commit already loaded");
+	assert.equal(diffRequests(app).length, before, "choosing a file costs no request");
+	await app.key("Escape");
+	assert.equal(collect(app.deep).some((node) => node.props.className === "gt_wInspector"), false, "Escape closes the file first");
+	assert.equal(rows()[1].props["aria-expanded"], true, "and leaves the commit expanded");
+	rows()[1].props.onClick();
+	await app.settle();
+	assert.equal(rows()[1].props["aria-expanded"], false, "pressing an expanded commit folds it");
+});
+
+await check("a blamed line's commit opens in the Repository inspector", async () => {
+	const app = mountWide();
+	await app.settle();
+	// The mode is remembered per session, and the previous check left Repository open.
+	let tree = await app.mode("review");
+	tree = await app.click(tree, "Show blame");
+	assert.ok(app.keys.includes("GET api/git.blame"));
+	const sha = collect(tree).find((node) => node.type?.displayName === "Button" && text(node) === "aaaaaaa");
+	sha.props.onClick();
+	tree = await app.settle();
+	assert.equal(primitivesNamed(tree, "SegmentedControl").find((node) => node.props.id.startsWith("gt-mode-")).props.value, "repository");
+	assert.deepEqual(diffRequests(app).at(-1), { sessionId: "session-1", scope: "commit", rev: BLAME.lines[0].sha });
+});
+
+await check("the header CI button opens the CI inspector and a second press closes it", async () => {
+	const app = mountWide();
+	let tree = await app.settle();
+	const ci = () => primitivesNamed(app.deep, "Button").find((node) => node.props.title === "Open CI details");
+	ci().props.onClick();
+	tree = await app.settle();
+	assert.ok(collect(tree).some((node) => node.props.className === "gt_wInspector"), "the first press opens CI");
+	assert.equal(ci().props["aria-pressed"], true);
+	ci().props.onClick();
+	tree = await app.settle();
+	assert.equal(collect(tree).some((node) => node.props.className === "gt_wInspector"), false, "the second press closes it");
+});
+
+await check("the diff is side by side by default, and one icon toggles one column", async () => {
+	const app = mountWide();
+	await app.settle();
+	let tree = await app.mode("review");
+	const toggle = () => primitivesNamed(app.deep, "Button").find((node) => node.props["aria-label"] === "Side by side");
+	assert.equal(toggle().props["aria-pressed"], true);
+	assert.ok(collect(tree).some((node) => node.props["data-layout"] === "split"));
+	toggle().props.onClick();
+	tree = await app.settle();
+	assert.ok(collect(tree).some((node) => node.props["data-layout"] === "unified"));
+	assert.equal(savedPreferences.get("dsh-gitview.wide-unified"), "true", "the sidebar's own layout key is left alone");
+	toggle().props.onClick();
+	await app.settle();
+});
+
+await check("the You-are-here card names the branch, HEAD, uncommitted work and CI on one line each", async () => {
+	const passing = { kind: "ready", remote: "origin", remotes: ["origin"], provider: "github", host: "github.com", repository: "owner/repo", sha: "a".repeat(40), state: "success", partial: false,
+		checks: [{ name: "build", state: "success" }, { name: "lint", state: "skipped" }, { name: "deploy", state: "failure" }] };
+	const app = mountWide({ status: { ...STATUS, upstream: "origin/main", ahead: 0, behind: 35 }, ci: passing });
+	await app.settle();
+	let tree = await app.mode("repository");
+	const card = collect(tree).find((node) => node.props.className === "gt_wHere");
+	const track = collect(card).find((node) => node.props.className === "gt_wTrack");
+	assert.equal(track.props["aria-label"], "35 behind", "the words stay for the tooltip and screen readers");
+	assert.deepEqual([...collect(track).filter((node) => node.props.className === "gt_danger").map(text)], ["35"], "behind is a bare red number");
+	assert.equal(collect(track).some((node) => node.props.className === "gt_success"), false, "nothing ahead, nothing green");
+	assert.match(text(card), /→ origin\/main/);
+	assert.match(text(card), /aaaa111feat: newest/, "HEAD is the commit carrying the head ref");
+	assert.match(text(card), /3 uncommitted/);
+	assert.match(text(card), /1 Passed · 1 Skipped/, "settled jobs are counted, not listed");
+	assert.equal(collect(card).filter((node) => node.props.className === "gt_row gt_wHereCheck").length, 1, "only the failed job gets its own row");
+	assert.equal(collect(tree).some((node) => node.props.className === "gt_wCiHead"), false);
+	const headRow = collect(card).find((node) => node.props.title === "Show HEAD in the history");
+	headRow.props.onClick();
+	tree = await app.settle();
+	assert.deepEqual(diffRequests(app).at(-1), { sessionId: "session-1", scope: "commit", rev: HISTORY.commits[0].sha });
+	assert.equal(collect(tree).find((node) => node.props["data-head"] === true)?.props["aria-current"], "true", "the HEAD row is marked and selected");
+});
+
+await check("revealing a row scrolls only its own pane, never the view around it", () => {
+	const scrolls = [];
+	const pane = { getBoundingClientRect: () => ({ top: 100, bottom: 500, height: 400 }), scrollBy: (options) => scrolls.push(options.top) };
+	const row = (top) => ({ closest: (selector) => (selector.includes(".gt_wLedger") ? pane : null), getBoundingClientRect: () => ({ top, bottom: top + 34, height: 34 }) });
+	internals.reveal(row(2000));
+	internals.reveal(row(300));
+	internals.reveal(row(40));
+	internals.reveal(row(2000), "center");
+	assert.deepEqual(scrolls, [2000 + 34 - 500 + 8, 40 - 100 - 8, 2000 - 100 - (400 - 34) / 2], "below, inside (no scroll), above, centred");
+	internals.reveal({ closest: () => null, getBoundingClientRect: () => ({}) });
+	assert.equal(scrolls.length, 3, "an element outside every pane is left alone");
+});
+
+await check("Review lists files flat under the commit card, VS Code style, with the tree one click away", async () => {
+	const app = mountWide();
+	await app.settle();
+	let tree = await app.mode("review");
+	const rail = collect(tree).find((node) => node.props.className === "gt_wRail");
+	const order = collect(rail).map((node) => node.props.className).filter((name) => ["gt_wCommit", "gt_wRailBody"].includes(name));
+	assert.deepEqual(order, ["gt_wCommit", "gt_wRailBody"], "the message and Commit come before the changes");
+	assert.ok(button(tree, "AI generate"), "the AI draft is an icon inside the message box");
+	const flat = collect(rail).filter((node) => node.props.className === "gt_row gt_wFileRow");
+	assert.deepEqual(flat.map((node) => text(node).replace(/[+−]/g, "")), ["staged.txtA", "a.jssrcM", "note.md?"], "name, folder, git's letter");
+	tree = await app.click(tree, "View as tree");
+	assert.ok(collect(tree).some((node) => node.props["aria-expanded"] === true && node.props.title === "src"), "the folder tree is back");
+	assert.equal(savedPreferences.get("dsh-gitview.wide-tree"), "true");
+	await app.click(app.deep, "View as list");
+});
+
+await check("fileChunks splits a patch per file and ignores header-like lines inside hunks", () => {
+	const chunks = internals.fileChunks("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n--- not a header\n+++ nor this\n");
+	assert.equal(chunks.length, 1);
+	assert.equal(chunks[0].path, "x");
+	assert.equal(chunks[0].added, 1);
+	assert.equal(chunks[0].deleted, 1);
+	assert.deepEqual([...internals.fileChunks("+only\n", "fallback.js").map((chunk) => chunk.path)], ["fallback.js"]);
+});
+//#endregion
+
 console.log(`\nPASS  ${passed} checks`);

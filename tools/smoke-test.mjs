@@ -106,7 +106,7 @@ await check("the module exposes apply() and inject[]", () => {
 
 // ── 3. apply() against a recording context ──────────────────────────────────
 
-const recorded = { effects: 0, dictionaries: [], types: [], bodies: [], injections: [] };
+const recorded = { effects: 0, dictionaries: [], types: [], bodies: [], injections: [], withdrawn: [] };
 const ctx = {
 	effect(fn, label) {
 		assert.equal(typeof label, "string", "ctx.effect requires a label");
@@ -125,7 +125,7 @@ const ctx = {
 	sidebarRightTabs: {
 		register(definition) {
 			recorded.types.push(definition);
-			return () => {};
+			return () => recorded.withdrawn.push(`type:${definition.id}`);
 		}
 	},
 	slots: {
@@ -135,7 +135,7 @@ const ctx = {
 		},
 		register(spec, body) {
 			recorded.bodies.push({ spec, body });
-			return () => {};
+			return () => recorded.withdrawn.push(spec.name);
 		}
 	}
 };
@@ -168,8 +168,9 @@ await check("registers exactly one tab type, with a guide button", () => {
 });
 
 await check("registers the body into the right keyed slot, and injects a FACTORY", () => {
-	assert.deepEqual(recorded.injections, ["sidebar.right.pane.tab"]);
-	assert.equal(recorded.bodies.length, 1);
+	// By default Git appears in both places, and offers the choice in Settings.
+	assert.deepEqual(recorded.injections, ["sidebar.right.pane.tab", "conversation.view", "settings.general.item"]);
+	assert.equal(recorded.bodies.length, 3);
 	const { spec, body } = recorded.bodies[0];
 	assert.equal(spec.name, "sidebar.right.pane.tab");
 	assert.equal(spec.key, recorded.types[0].id, "body key must equal the tab type id");
@@ -177,6 +178,38 @@ await check("registers the body into the right keyed slot, and injects a FACTORY
 	assert.equal(typeof body, "function");
 	// The renderer does `inject(...args)`; anything else throws at first render.
 	assert.equal(typeof spec.inject, "function", "inject must be a factory, not an object");
+});
+
+await check("the conversation view is a second body over the same data channel", () => {
+	const { spec, body } = recorded.bodies[1];
+	assert.equal(spec.name, "conversation.view");
+	assert.equal(spec.id, "git");
+	assert.equal(typeof spec.order, "number");
+	assert.equal(spec.locale, "gitTree");
+	assert.equal(typeof spec.label, "function", "the tab label follows the locale");
+	assert.equal(typeof body, "function");
+	assert.equal(typeof spec.inject, "function", "inject must be a factory, not an object");
+	assert.deepEqual(Object.keys(spec.inject("session-1")).sort(), Object.keys(recorded.bodies[0].spec.inject("session-1")).sort());
+});
+
+await check("the placement setting withdraws and restores each surface", () => {
+	const { spec } = recorded.bodies[2];
+	assert.equal(spec.name, "settings.general.item");
+	const { placement } = spec.inject();
+	assert.equal(placement.get(), "both");
+
+	placement.set("conversation");
+	assert.deepEqual(recorded.withdrawn.splice(0).sort(), ["conversation.view", "sidebar.right.pane.tab", "type:dsh-gitview"], "every surface is withdrawn before the new set registers");
+	assert.equal(recorded.bodies.at(-1).spec.name, "conversation.view");
+	assert.equal(recorded.types.length, 1, "no sidebar type while only the conversation view is asked for");
+
+	placement.set("sidebar");
+	assert.deepEqual(recorded.withdrawn.splice(0), ["conversation.view"]);
+	assert.equal(recorded.bodies.at(-1).spec.name, "sidebar.right.pane.tab");
+	assert.equal(recorded.types.length, 2);
+
+	placement.set("both");
+	recorded.withdrawn.length = 0;
 });
 
 await check("the body declares no undeclared props", () => {
@@ -550,8 +583,22 @@ await check("only primitives that shipped bundles really export are used", () =>
 			// own type, which is what makes a list of paths scannable.
 			"FileTypeIcon",
 			"IconBranchOutlineRegular",
+			// The Commit button's check, as in VS Code.
+			"IconCheckOutlineRegular",
+			// The settings row's selector chevron, as the shell's own selector rows draw it.
+			"IconChevronDownOutlineRegular",
+			// The diff layout toggle: one icon for side by side / one column.
+			"IconCompareSplitOutlineRegular",
+			// The changes list toggles between a flat list and the folder tree.
+			"IconFlatListOutlineRegular",
 			"IconFolderCloseRegular",
 			"IconFolderOpenRegular",
+			// The AI commit-message draft, inside the message box.
+			"IconSparkleRegular",
+			"IconWorkspaceTreeOutlineRegular",
+			// The shell's settings selector menu and its segmented tabs (mode, layout, list).
+			"Menu",
+			"SegmentedControl",
 			"Tag",
 			"classifyFileType",
 			"languageForPath",
@@ -617,7 +664,10 @@ await check("only enum values that shipped bundles really use are passed", () =>
  */
 const SHELL_TOKENS = [
 	"--dsh-content-font-size-secondary",
+	// Verified in ui-trajectory (sticky headers, inspector) and ui-conversation (settings selectors).
+	"--dsw-alias-bg-layer-1",
 	"--dsw-alias-bg-layer-2",
+	"--dsw-alias-bg-module-platform",
 	"--dsw-alias-code-diff-added",
 	"--dsw-alias-code-diff-deleted",
 	"--dsw-alias-border-l1",

@@ -644,7 +644,7 @@ export function ReflogView({ state, t }) {
  * selection to read. Every row carries its own commit, and that commit's sha is
  * a button back into the patch — which is where the reason for a line lives.
  */
-export function BlameView({ state, t, path, draft, setDraft, onShow, onOpenCommit, selected }) {
+export function BlameView({ state, t, path, draft, setDraft, onShow, onOpenCommit, selected, field = true }) {
 	const highlight = primitives.useCodeHighlighter(primitives.languageForPath(path));
 	const highlighted = state.value?.kind === "ready" ? highlight((state.value.lines ?? []).map((line) => line.text).join("\n")) : undefined;
 	let body = null;
@@ -751,7 +751,8 @@ export function BlameView({ state, t, path, draft, setDraft, onShow, onOpenCommi
 	return h(
 		"div",
 		{ key: "blame", style: { display: "flex", flexDirection: "column", minHeight: 0, flex: "1 1 auto" } },
-		h(
+		// The conversation view names the path itself, so it asks for no field.
+		!field ? null : h(
 			"div",
 			{ key: "field", className: "gt_toolbar gt_commitRow" },
 			h("input", {

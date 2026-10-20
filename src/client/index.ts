@@ -1,4 +1,4 @@
-// @ts-nocheck -- moved verbatim from the hand-written bundle; type it when it is next changed.
+// @ts-nocheck -- `ctx` is a cordis context whose types are not installed here.
 import "./styles";
 import { NS, en, ja } from "./locales";
 import { GROUPS, VIEWS, countsText, directoryPaths, flatten, sliceTree, stateOf } from "./model";
@@ -8,6 +8,8 @@ import { PatchHunk, diffPane, operationBanner, patchParts, placeholder, splitHun
 import { BlameView, BranchesView, HistoryView, ReflogView, StatusView, changeSection, commitBox, identityDetails, treeRows } from "./views";
 import { CIView } from "./ci";
 import { GitTreeBody, TAB_ID, gitTreeDefinition } from "./sidebar";
+import { GitWideView, fileChunks, reveal } from "./wide";
+import { PlacementRow, placementStore } from "./settings";
 
 /**
  * Host-side services this plugin waits for.
@@ -20,7 +22,9 @@ import { GitTreeBody, TAB_ID, gitTreeDefinition } from "./sidebar";
 const inject = ["slots", "locale", "sidebarRightTabs", "sessions", "conversation"];
 
 /**
- * Client plugin body: register the dictionaries, the type, and its body.
+ * Client plugin body: register the dictionaries, the placement setting, and
+ * the surfaces that setting asks for — the sidebar tab, the conversation view,
+ * or both.
  *
  * Every registration sits inside its own `ctx.effect`, so unloading the plugin
  * (or disabling its Loader row) disposes exactly what it added.
@@ -31,8 +35,6 @@ function apply(ctx) {
 	const t = ctx.locale.bind(NS);
 
 	ctx.effect(() => ctx.locale.register(NS, { en, ja }), "dsh-gitview: dictionaries");
-
-	ctx.effect(() => ctx.sidebarRightTabs.register(gitTreeDefinition(t)), "dsh-gitview: tab type");
 
 	const business = {
 		askAI: (sessionId, text) => {
@@ -46,6 +48,7 @@ function apply(ctx) {
 			const end = state.draft.length - (state.occurrences ?? []).reduce((extra, chip) => extra + chip.length - 1, 0);
 			const inserted = actx.bail("slash/input-insert-text", { text: `${state.draft ? "\n\n" : ""}${text}`, span: { start: end, end, draftRev: state.draftRev } });
 			if (inserted !== true) return false;
+			// The draft is for reading before sending, so a folded composer opens first.
 			input.focus();
 			return true;
 		},
@@ -61,20 +64,50 @@ function apply(ctx) {
 		generateMessage: (sessionId, language, signal) => write(ROUTES.message, sessionId, { language }, signal)
 	};
 
-	// `slots.inject` waits for the slot's declaration epoch: the sidebar may load
-	// after this plugin, and a re-declaration must re-register the body.
+	// Each surface is registered while the placement asks for it, and withdrawn
+	// (type, body and all) the moment it stops: the shell then falls back to Chat
+	// for a session that was showing the conversation view.
+	const placement = placementStore();
+	ctx.effect(() => {
+		let shown = null;
+		const withdrawals = [];
+		const sync = () => {
+			const value = placement.get();
+			if (value === shown) return;
+			shown = value;
+			for (const withdraw of withdrawals.splice(0)) withdraw();
+			// `slots.inject` waits for the slot's declaration epoch: the sidebar may load
+			// after this plugin, and a re-declaration must re-register the body.
+			// `inject` must be a FACTORY: the slot renderer calls it with the scope args
+			// and spreads the result into the component's props.
+			if (value !== "conversation") {
+				withdrawals.push(
+					ctx.sidebarRightTabs.register(gitTreeDefinition(t)),
+					ctx.slots.inject("sidebar.right.pane.tab", () =>
+						ctx.slots.register({ name: "sidebar.right.pane.tab", key: TAB_ID, locale: NS, inject: () => business }, GitTreeBody))
+				);
+			}
+			if (value !== "sidebar") {
+				withdrawals.push(
+					// Order 20 seats Git after Trajectory (10) in the view tabs.
+					ctx.slots.inject("conversation.view", () =>
+						ctx.slots.register({ name: "conversation.view", id: "git", order: 20, locale: NS, label: () => t("type.label"), inject: () => business }, GitWideView))
+				);
+			}
+		};
+		sync();
+		const unsubscribe = placement.subscribe(sync);
+		return () => {
+			unsubscribe();
+			for (const withdraw of withdrawals.splice(0)) withdraw();
+		};
+	}, "dsh-gitview: surfaces");
+
 	ctx.effect(
 		() =>
-			ctx.slots.inject("sidebar.right.pane.tab", () =>
-				ctx.slots.register(
-					// `inject` must be a FACTORY: the slot renderer calls it with the
-					// scope args and spreads the result into the component's props.
-					// Passing a plain object here throws at first render.
-					{ name: "sidebar.right.pane.tab", key: TAB_ID, locale: NS, inject: () => business },
-					GitTreeBody
-				)
-			),
-		"dsh-gitview: tab body"
+			ctx.slots.inject("settings.general.item", () =>
+				ctx.slots.register({ name: "settings.general.item", id: "dsh-gitview-placement", order: 30, locale: NS, inject: () => ({ placement }) }, PlacementRow)),
+		"dsh-gitview: placement setting"
 	);
 }
 
@@ -114,5 +147,9 @@ export const __internals = {
 	PatchHunk,
 	commitBox,
 	treeRows,
-	placeholder
+	placeholder,
+	GitWideView,
+	fileChunks,
+	reveal,
+	PlacementRow
 };

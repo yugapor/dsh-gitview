@@ -1,6 +1,7 @@
 // @ts-nocheck -- moved verbatim from the hand-written bundle; type it when it is next changed.
 import { react } from "./deps";
 import { REJECTIONS } from "./model";
+import type { GitActions } from "./types";
 
 /** Best-effort message from an error envelope or a thrown value. */
 export function messageOf(error) {
@@ -130,12 +131,12 @@ export function saveLayout(mode) {
  * on them. A successful mutation hands its fresh status to `adopt.current`,
  * which the caller points at its own status resource after loading it.
  */
-export function useGitActions({ sessionId, signal, t, mutate, generateMessage, adopt }) {
+export function useGitActions({ sessionId, signal, t, mutate, generateMessage, adopt }): GitActions {
 	const [busy, setBusy] = react.useState(false);
-	const [notice, setNotice] = react.useState(null);
+	const [notice, setNotice] = react.useState<string | null>(null);
 	const [message, setMessage] = react.useState("");
 	const [generating, setGenerating] = react.useState(false);
-	const [generatedModel, setGeneratedModel] = react.useState(null);
+	const [generatedModel, setGeneratedModel] = react.useState<string | null>(null);
 
 	const runMutation = react.useCallback(
 		async (body) => {
