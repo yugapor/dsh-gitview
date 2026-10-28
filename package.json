@@ -1,6 +1,6 @@
 {
   "name": "dsh-gitview",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Git changes, diffs, history and CI in the DeepSeek Harness sidebar.",
   "repository": {
     "type": "git",
@@ -40,7 +40,8 @@
     "test:install": "node tools/install-test.mjs",
     "test:package": "node tools/package-test.mjs",
     "check": "tsc -p . && node tools/build-client.mjs --check && node --check lib/index.js && node --check lib/client.js && node --check lib/git.js && node --check lib/ci.js",
-    "install-profile": "bash tools/install-into-profile.sh"
+    "install-profile": "bash tools/install-into-profile.sh",
+    "test:track": "node tools/dsh-track.mjs"
   },
   "keywords": [
     "dsh",
@@ -51,7 +52,7 @@
   ],
   "engines": {
     "node": ">=24",
-    "dsh": "0.2.0-rc.2"
+    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.4 || 0.2.2-alpha.2"
   },
   "dsh": {
     "manifestVersion": 1,
@@ -69,9 +70,8 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.4",
-    "@deepseek-ai/dsh-client-locale": "~0.2.0-rc.2",
-    "@deepseek-ai/dsh-client-ui-sidebar-right": "~0.2.0-rc.2"
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.4 || 0.2.2-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.4 || 0.2.2-alpha.2"
   },
   "publishConfig": {
     "access": "public"

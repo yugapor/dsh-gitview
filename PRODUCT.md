@@ -34,7 +34,7 @@ Git scoped to the active DSH session's workspace, sitting next to the agent conv
 - Features (both surfaces): working-tree status, staging, commit, unified/split diffs with highlighting, commit graph, branches, blame, reflog, CI status (GitHub, GitLab, Gitea; GitHub Actions step details), AI commit message, Ask AI.
 - The conversation view covers every feature, not a subset.
 - Client is written in TypeScript under `src/client/` and built into `lib/client.js` (committed; the Host serves it verbatim). React via `require("react")`, `@deepseek-ai/dsh-client-ui-primitives`; no runtime dependencies.
-- DSH 0.2.0-rc.2, Node 24+. Does not rerun or cancel CI. Never commits automatically. Tokens never reach the browser.
+- The DSH versions listed under `engines.dsh` (install-tested in CI; rdsh ships this plugin by default), Node 24+. Does not rerun or cancel CI. Never commits automatically. Tokens never reach the browser.
 - Locales: en, ja.
 
 ## Brand Commitments

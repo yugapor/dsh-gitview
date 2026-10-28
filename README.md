@@ -11,7 +11,7 @@ A Git panel for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 
 ## Install
 
-Requires DSH **0.2.0-rc.2**, Node.js **24+**, Git and pnpm. Other DSH versions and Desktop are not tested.
+Requires Node.js **24+**, Git, pnpm, and one of the DSH versions listed under `engines.dsh` in `package.json` (each one is install-tested in CI). Other DSH versions are not tested; [rdsh](https://github.com/jimoto-no-llm/rustdsh) installs this plugin by default and moves DSH along its `rc` channel, so new tags are checked weekly against that list. Desktop is not tested.
 
 ```sh
 dsh plugin --profile web add dsh-gitview
@@ -48,13 +48,21 @@ npm run check   # types, a stale-build check, syntax
 npm test
 ```
 
-Tests need `js-yaml@4.3.2` available through `NODE_PATH`. Package verification also needs DSH 0.2.0-rc.2 and pnpm:
+Tests need `js-yaml@4.3.2` available through `NODE_PATH`. Package verification also needs pnpm and a DSH listed in `engines.dsh` (`DSH_BIN` selects the binary):
 
 ```sh
 npm run test:package
 ```
 
-This builds a `.tgz`, checks its contents, and tests standard installation, configuration composition and removal in a temporary DSH profile. It does not start a server or call a model. The verified package is saved in `dist/`. GitHub Actions runs these checks and retains the package artifact for 14 days; it does not publish to npm automatically.
+This builds a `.tgz`, checks its contents, and tests standard installation, configuration composition and removal in a temporary DSH profile. It does not start a server or call a model. The verified package is saved in `dist/`. GitHub Actions runs these checks once per listed DSH version and retains the package artifacts for 14 days; it does not publish to npm automatically.
+
+To see whether npm has published a DSH version the list does not cover yet:
+
+```sh
+npm run test:track
+```
+
+The same check runs weekly in GitHub Actions. To add a version: install it, run `DSH_BIN=<path> npm run test:package`, then add the version to `engines.dsh` and both `peerDependencies` in `package.json`.
 
 ## License
 

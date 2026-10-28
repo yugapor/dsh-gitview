@@ -1,5 +1,5 @@
 /** Build the distributable and exercise the real DSH CLI in a disposable profile.
- * Requires DSH 0.2.0-rc.2, pnpm and the test-only js-yaml parser; may use the network.
+ * Requires one of the DSH versions package.json declares under engines.dsh, pnpm and the test-only js-yaml parser; may use the network.
  * No server, model call, user profile, or registry publication is involved.
  */
 import assert from "node:assert/strict";
@@ -26,7 +26,9 @@ function run(command, args) {
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
 
 try {
-	assert.equal(run(dsh, ["--version"]).trim(), "0.2.0-rc.2", "test the declared DSH version");
+	const version = run(dsh, ["--version"]).trim();
+	const verified = json(join(root, "package.json")).engines.dsh.split("||").map((entry) => entry.trim());
+	assert.ok(verified.includes(version), `DSH ${version} is not declared in engines.dsh (${verified.join(", ")})`);
 	const [pack] = JSON.parse(run("npm", ["pack", root, "--json", "--ignore-scripts", "--pack-destination", scratch]));
 	const expected = ["LICENSE", "README.md", "cordis.patch.yml", "lib/ci.js", "lib/client.js", "lib/git.js", "lib/index.js", "package.json"];
 	assert.deepEqual(pack.files.map((file) => file.path).sort(), expected.sort(), "only distributable files belong in the archive");
@@ -36,7 +38,7 @@ try {
 	const manifest = json(join(unpacked, "package.json"));
 	assert.equal(manifest.license, "MIT");
 	assert.match(readFileSync(join(unpacked, "LICENSE"), "utf8"), /MIT License[\s\S]*Permission is hereby granted/);
-	assert.equal(manifest.engines.dsh, "0.2.0-rc.2");
+	assert.deepEqual(manifest.engines.dsh.split("||").map((entry) => entry.trim()), verified);
 	assert.equal(manifest.dsh.manifestVersion, 1);
 	assert.equal(manifest.dsh.bundle.patch, "./cordis.patch.yml");
 	assert.deepEqual(load(readFileSync(join(unpacked, manifest.dsh.bundle.patch), "utf8")), [
