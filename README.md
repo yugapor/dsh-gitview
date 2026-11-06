@@ -54,7 +54,7 @@ Tests need `js-yaml@4.3.2` available through `NODE_PATH`. Package verification a
 npm run test:package
 ```
 
-This builds a `.tgz`, checks its contents, and tests standard installation, configuration composition and removal in a temporary DSH profile. It does not start a server or call a model. The verified package is saved in `dist/`. GitHub Actions runs these checks once per listed DSH version and retains the package artifacts for 14 days; it does not publish to npm automatically.
+This builds a `.tgz`, checks its contents, and tests standard installation, configuration composition and removal in a temporary DSH profile. It does not start a server or call a model. The verified package is saved in `dist/`. GitHub Actions runs these checks once per listed DSH version and retains the package artifacts for 14 days. After a push to `main` passes every listed version, CI publishes the `package.json` version to npm through trusted publishing and creates its `v<version>` release, unless npm already has that version.
 
 To see whether npm has published a DSH version the list does not cover yet:
 
