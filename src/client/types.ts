@@ -51,6 +51,14 @@ export interface StatusReady {
 	identity: unknown;
 	state?: unknown;
 	base?: Base | null;
+	/** Absent from a Host half older than worktree support. */
+	checkout?: Checkout;
+}
+
+/** Which checkout the session's directory is: the main one or a linked worktree. */
+export interface Checkout {
+	linked: boolean;
+	mainRoot: string | null;
 }
 export type Status = StatusReady | { kind: "no-workspace" | "no-repository" };
 
@@ -90,6 +98,49 @@ export interface Branch {
 	ahead: number;
 	behind: number;
 	gone: boolean;
+	/** The checkout that has this branch, if any. */
+	worktree?: string | null;
+}
+
+/** One checkout from `api/git.worktrees`. */
+export interface Worktree {
+	path: string;
+	name: string;
+	head: string | null;
+	short: string | null;
+	subject: string | null;
+	date: string | null;
+	branch: string | null;
+	detached: boolean;
+	bare: boolean;
+	locked: boolean;
+	lockReason: string | null;
+	prunable: boolean;
+	prunableReason: string | null;
+	main: boolean;
+	current: boolean;
+	pool: boolean;
+	upstream: string | null;
+	ahead: number;
+	behind: number;
+	changed: number | null;
+}
+
+export interface Worktrees {
+	kind: "ready";
+	repoRoot: string;
+	mainRoot: string | null;
+	linked: boolean;
+	worktrees: Worktree[];
+	truncated: boolean;
+	actions?: { running: boolean; enter: boolean; create: boolean };
+}
+
+export interface WorktreeActionResult {
+	kind: string;
+	code?: string;
+	message?: string;
+	entered?: string | null;
 }
 
 export interface ReflogEntry {
@@ -147,6 +198,8 @@ export interface GitBusiness {
 	askAI(sessionId: string, text: string): boolean;
 	generateMessage(sessionId: string, language: string, signal?: AbortSignal): Promise<Envelope<unknown>>;
 	mutate(sessionId: string, body: object, signal?: AbortSignal): Promise<Envelope<unknown>>;
+	loadWorktrees(sessionId: string, signal?: AbortSignal): Promise<Envelope<Worktrees | { kind: string }>>;
+	worktreeAction(sessionId: string, body: object, signal?: AbortSignal): Promise<Envelope<WorktreeActionResult>>;
 }
 
 /** Namespace-bound translate, as the slot runtime supplies it. */

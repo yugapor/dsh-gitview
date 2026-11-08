@@ -617,6 +617,26 @@ const ONLY_STAGED = statusWith(
 	1
 );
 
+/** Three checkouts: the session's, an agent's in the DSH pool, and one whose directory is gone. */
+const worktreeEntry = (fields) => ({
+	head: "a".repeat(40), short: "aaaaaaa", subject: "tip", date: "2026-01-01T00:00:00.000Z", branch: null, detached: false, bare: false,
+	locked: false, lockReason: null, prunable: false, prunableReason: null, main: false, current: false, pool: false,
+	upstream: null, ahead: 0, behind: 0, changed: 0, ...fields
+});
+const WORKTREES = {
+	kind: "ready",
+	repoRoot: "/repo",
+	mainRoot: "/repo",
+	linked: false,
+	truncated: false,
+	actions: { running: true, enter: true, create: true },
+	worktrees: [
+		worktreeEntry({ path: "/repo", name: "repo", branch: "main", main: true, current: true }),
+		worktreeEntry({ path: "/repo/.agents/worktrees/dsh-1", name: "dsh-1", branch: "dsh-1", pool: true, changed: 3, ahead: 2 }),
+		worktreeEntry({ path: "/old", name: "old", detached: true, prunable: true, prunableReason: "gitdir file points to non-existent location", changed: null })
+	]
+};
+
 /** Mount the tab body with scripted routes. */
 let mountedApp;
 function mount(options = {}) {
@@ -633,6 +653,8 @@ function mount(options = {}) {
 		"GET api/git.blame": reply(options.blame ?? BLAME),
 		"GET api/git.ci": options.onCI ?? reply(options.ci ?? { kind: "ready", remote: "origin", remotes: ["origin", "upstream"], provider: "github", host: "github.com", repository: "owner/repo", sha: "a".repeat(40), state: "failure", partial: false, checks: [{ name: "test", state: "failure", group: "Checks", url: "https://github.com/owner/repo/actions/runs/1" }] }),
 		"GET api/git.auth": options.onAuth ?? reply(options.auth ?? { kind: "ready", login: "Fixture", source: "keyring", scopes: "repo", access: "ci-readable" }),
+		"GET api/git.worktrees": options.onWorktrees ?? reply(options.worktrees ?? WORKTREES),
+		"POST api/git.worktree": options.onWorktreeAction ?? ((request) => reply({ kind: "ready", action: request.body.action, entered: request.body.action === "enter" ? request.body.path : null })()),
 		"POST api/git.message": options.onGenerate ?? reply({ kind: "ready", message: "Add the staged file", model: { provider: "fixture", model: "selected" } }),
 		"POST api/git.mutate": (request) =>
 			reply(
@@ -2286,4 +2308,150 @@ await check("fileChunks splits a patch per file and ignores header-like lines in
 });
 //#endregion
 
+//#region worktrees
+
+/** Drive the shared Worktrees section on its own, with a recording runner. */
+function mountWorktrees(state, extra = {}) {
+	const runs = [];
+	const runner = { busy: false, run: async (body) => { runs.push(body); return true; } };
+	const driver = createDriver(internals.WorktreeSection, { state, t, runner, base: "main", ...extra }, (tree) => renderDeep(tree));
+	return {
+		runs,
+		driver,
+		async settle() { await driver.settle(); return renderDeep(driver.tree); },
+		get deep() { return renderDeep(driver.tree); }
+	};
+}
+/** A value made in the bundle's realm, compared by shape. */
+const plain = (value) => JSON.parse(JSON.stringify(value));
+const worktreeRows = (tree) => collect(tree).filter((node) => node.props.className === "gt_row gt_wtRow");
+
+await check("the Worktrees section marks where the session is, the agent's checkout and a missing one", async () => {
+	const view = mountWorktrees({ phase: "ready", value: WORKTREES });
+	const tree = await view.settle();
+	const rows = worktreeRows(tree);
+	assert.equal(rows.length, 3);
+	assert.equal(rows[0].props["aria-current"], "true");
+	assert.match(text(rows[0]), /this session/);
+	assert.match(text(rows[0]), /main/);
+	assert.match(text(rows[1]), /agent/);
+	assert.match(text(rows[1]), /3 changed/);
+	assert.match(text(rows[1]), /↑2/);
+	assert.match(text(rows[2]), /detached at aaaaaaa/);
+	assert.match(text(rows[2]), /missing/);
+	assert.equal(button(rows[0], "Switch here"), undefined, "the session's own checkout offers no switch");
+	assert.equal(button(rows[0], "Remove"), undefined, "nor removal");
+	assert.equal(button(rows[2], "Switch here"), undefined, "a missing checkout cannot be entered");
+	assert.ok(button(tree, "Prune"), "a missing checkout offers Prune");
+	assert.equal(new Set(view.driver.counts).size, 1, "the hook order is identical on every render");
+});
+
+await check("switching sends the listed path, and removal and prune ask once first", async () => {
+	const view = mountWorktrees({ phase: "ready", value: WORKTREES });
+	let tree = await view.settle();
+	button(worktreeRows(tree)[1], "Switch here").props.onClick({ stopPropagation() {} });
+	assert.deepEqual(plain(view.runs.at(-1)), { action: "enter", path: "/repo/.agents/worktrees/dsh-1" });
+	button(worktreeRows(tree)[1], "Remove").props.onClick({ stopPropagation() {} });
+	tree = await view.settle();
+	assert.equal(view.runs.length, 1, "Remove only asks");
+	assert.match(text(worktreeRows(tree)[1]), /Remove dsh-1\? The branch stays\./);
+	button(worktreeRows(tree)[1], "Remove").props.onClick({ stopPropagation() {} });
+	assert.deepEqual(plain(view.runs.at(-1)), { action: "remove", path: "/repo/.agents/worktrees/dsh-1" });
+	tree = await view.settle();
+	button(tree, "Prune").props.onClick();
+	tree = await view.settle();
+	assert.equal(view.runs.length, 2, "Prune only asks");
+	const confirm = collect(tree).find((node) => node.props.className === "gt_wtConfirm gt_wtSectionConfirm");
+	assert.match(text(confirm), /Forget 1 missing checkout/);
+	button(confirm, "Prune").props.onClick();
+	assert.deepEqual(plain(view.runs.at(-1)), { action: "prune" });
+});
+
+await check("a session that is not running cannot switch or create, and says why", async () => {
+	const idle = { ...WORKTREES, actions: { running: false, enter: true, create: true } };
+	const view = mountWorktrees({ phase: "ready", value: idle });
+	let tree = await view.settle();
+	const switching = button(worktreeRows(tree)[1], "Switch here");
+	assert.equal(switching.props.disabled, true);
+	assert.match(switching.props.title, /not running/);
+	button(tree, "New").props.onClick();
+	tree = await view.settle();
+	assert.equal(button(tree, "Create and switch").props.disabled, true);
+});
+
+await check("a new worktree starts from the current branch unless another base is typed", async () => {
+	const view = mountWorktrees({ phase: "ready", value: WORKTREES });
+	let tree = await view.settle();
+	button(tree, "New").props.onClick();
+	tree = await view.settle();
+	const create = () => button(view.deep, "Create and switch");
+	create().props.onClick({ preventDefault() {} });
+	assert.deepEqual(plain(view.runs.at(-1)), { action: "create", from: "main" });
+	await view.settle();
+	assert.equal(create(), undefined, "a successful creation closes the form");
+	button(view.deep, "New").props.onClick();
+	await view.settle();
+	const inputs = collect(view.deep).filter((node) => node.type === "input");
+	inputs[0].props.onChange({ target: { value: "v1.0" } });
+	inputs[1].props.onChange({ target: { value: "fix/login" } });
+	await view.settle();
+	create().props.onClick({ preventDefault() {} });
+	assert.deepEqual(plain(view.runs.at(-1)), { action: "create", from: "v1.0", name: "fix/login" });
+});
+
+await check("a repository with one checkout and no worktree service draws no section", async () => {
+	const single = { ...WORKTREES, actions: { running: true, enter: true, create: false }, worktrees: [WORKTREES.worktrees[0]] };
+	const view = mountWorktrees({ phase: "ready", value: single });
+	assert.equal(await view.settle(), null);
+	const forced = mountWorktrees({ phase: "ready", value: single }, { always: true });
+	assert.equal(worktreeRows(await forced.settle()).length, 1);
+});
+
+await check("a linked checkout is badged in the header and a branch held elsewhere is tagged", () => {
+	assert.equal(internals.linkedBadge(undefined, t), null);
+	assert.equal(internals.linkedBadge({ linked: false, mainRoot: "/repo" }, t), null);
+	const badge = internals.linkedBadge({ linked: true, mainRoot: "/repo" }, t);
+	assert.equal(badge.props.title, "A linked worktree of /repo");
+	assert.equal(text(badge), "worktree");
+	assert.equal(internals.branchWorktreeTag({ worktree: "/repo", current: true }, t), null);
+	assert.equal(internals.branchWorktreeTag({ worktree: null }, t), null);
+	const tag = internals.branchWorktreeTag({ worktree: "/repo/.agents/worktrees/dsh-1", current: false }, t);
+	assert.equal(tag.props.title, "Checked out in /repo/.agents/worktrees/dsh-1");
+});
+
+await check("Repository reads the worktrees, and a switch re-reads everything", async () => {
+	const app = mountWide();
+	await app.settle();
+	let tree = await app.mode("repository");
+	assert.ok(app.keys.includes("GET api/git.worktrees"));
+	const before = app.keys.filter((key) => key === "GET api/git.tree").length;
+	button(worktreeRows(tree)[1], "Switch here").props.onClick({ stopPropagation() {} });
+	tree = await app.settle();
+	const posted = app.requests.find((request) => request.key === "POST api/git.worktree");
+	assert.deepEqual(posted.body, { action: "enter", path: "/repo/.agents/worktrees/dsh-1" });
+	assert.match(posted.url, /sessionId=session-1/);
+	assert.ok(app.keys.filter((key) => key === "GET api/git.tree").length > before, "the status is read again");
+	assert.match(text(tree), /This session now works in \/repo\/\.agents\/worktrees\/dsh-1\./);
+	await app.mode("review");
+});
+
+await check("a refused worktree action is explained, not thrown", async () => {
+	const app = mountWide({ onWorktreeAction: reply({ kind: "rejected", code: "session-idle" }) });
+	await app.settle();
+	let tree = await app.mode("repository");
+	button(worktreeRows(tree)[1], "Switch here").props.onClick({ stopPropagation() {} });
+	tree = await app.settle();
+	assert.match(text(tree), /This session is not running/);
+	await app.mode("review");
+});
+
+await check("the sidebar's Branches view lists the worktrees above the branches", async () => {
+	const app = mount();
+	let tree = await app.settle();
+	tree = await app.click(tree, "Branches");
+	assert.ok(app.keys.includes("GET api/git.worktrees"));
+	assert.equal(worktreeRows(renderDeep(tree)).length, 3);
+});
+
+//#endregion
 console.log(`\nPASS  ${passed} checks`);

@@ -1,6 +1,6 @@
 {
   "name": "dsh-gitview",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Git changes, diffs, history and CI in the DeepSeek Harness sidebar.",
   "repository": {
     "type": "git",

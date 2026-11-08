@@ -20,6 +20,17 @@ import {
 	AUTH_PATH,
 	MUTATIONS,
 	REFLOG_PATH,
+	WORKTREES_PATH,
+	WORKTREE_PATH,
+	WORKTREE_ACTIONS,
+	applyWorktreeAction,
+	effectiveDirectory,
+	isSafeBranchName,
+	readCheckout,
+	readWorktrees,
+	worktreeCapabilities,
+	worktreeResponse,
+	worktreesResponse,
 	STATUS_PATH,
 	apply,
 	applyMutation,
@@ -494,6 +505,155 @@ await check("a session nobody knows reports no working directory", async () => {
 	assert.equal(await cwdFor(ctx2, "cold"), "/fallback");
 });
 
+// ── effective working directory and worktrees ───────────────────────────────
+
+await check("the recorded working directory wins over the header", async () => {
+	let disposed = 0;
+	const ctx = {
+		sessionQuery: { observeSession: async () => ({ projections: { values: { workingDirectory: "/repo/.agents/worktrees/dsh-1" } }, [Symbol.dispose]: () => { disposed++; } }) },
+		sessions: { get: () => ({ header: { cwd: "/repo" } }) },
+		sandboxPolicy: { workspaceRoot: "/fallback" },
+		get: () => undefined
+	};
+	assert.equal(await cwdFor(ctx, "s1"), "/repo/.agents/worktrees/dsh-1");
+	assert.equal(disposed, 1, "the observation is released");
+});
+
+await check("no recorded directory, a failed query, or no query service falls back to the header", async () => {
+	const base = { sessions: { get: () => ({ header: { cwd: "/repo" } }) }, sandboxPolicy: { workspaceRoot: "/fallback" }, get: () => undefined };
+	const unset = { ...base, sessionQuery: { observeSession: async () => ({ projections: { values: { workingDirectory: null } } }) } };
+	assert.equal(await cwdFor(unset, "s1"), "/repo");
+	const failing = { ...base, sessionQuery: { observeSession: async () => { throw new Error("SESSION_QUERY_SESSION_NOT_FOUND"); } } };
+	assert.equal(await cwdFor(failing, "s1"), "/repo");
+	assert.equal(await effectiveDirectory(failing, "s1"), undefined);
+	// DSH 0.2.0 has no projection at all.
+	const older = { ...base, sessionQuery: { observeSession: async () => ({ projections: { values: {} } }) } };
+	assert.equal(await cwdFor(older, "s1"), "/repo");
+	assert.equal(await cwdFor(base, "s1"), "/repo");
+});
+
+await check("a linked checkout is told apart from the main one", async () => {
+	const linked = fakeSubprocess((argv) => argv[0] === "rev-parse" ? { stdout: "/repo/.git/worktrees/feat\n/repo/.git\n" } : {});
+	assert.deepEqual(await readCheckout({ subprocess: linked, executable: "/usr/bin/git" }, "/repo/.agents/worktrees/feat"), { linked: true, mainRoot: "/repo" });
+	assert.deepEqual(linked.specs[0].argv.slice(1), ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"]);
+	const main = fakeSubprocess(() => ({ stdout: "/repo/.git\n/repo/.git\n" }));
+	assert.deepEqual(await readCheckout({ subprocess: main, executable: "/usr/bin/git" }, "/repo"), { linked: false, mainRoot: "/repo" });
+	// An old git without --path-format reads as the main checkout, never as an error.
+	const old = fakeSubprocess(() => ({ exitCode: 129, stderr: "unknown option" }));
+	assert.deepEqual(await readCheckout({ subprocess: old, executable: "/usr/bin/git" }, "/repo"), { linked: false, mainRoot: "/repo" });
+});
+
+const WORKTREE_LIST = [
+	"worktree /repo", "HEAD " + "a".repeat(40), "branch refs/heads/main", "",
+	"worktree /repo/.agents/worktrees/dsh-1", "HEAD " + "b".repeat(40), "branch refs/heads/dsh-1", "locked agent at work", "",
+	"worktree /gone", "HEAD " + "c".repeat(40), "detached", "prunable gitdir file points to non-existent location", "",
+	""
+].join("\0");
+
+function worktreeReply(argv) {
+	if (argv[0] === "rev-parse" && argv[1] === "--show-toplevel") return { stdout: "/repo\n" };
+	if (argv[0] === "rev-parse") return { stdout: "/repo/.git\n/repo/.git\n" };
+	if (argv[0] === "worktree" && argv[1] === "list") return { stdout: WORKTREE_LIST };
+	if (argv[0] === "for-each-ref") return { stdout: "" };
+	if (argv[0] === "log") return { stdout: ["a".repeat(40), "aaaaaaa", "2026-01-02T03:04:05+09:00", "main tip"].join("\u001f") + "\u001e\n" };
+	if (argv[0] === "status") return { stdout: " M a.js\0?? b.js\0" };
+	return {};
+}
+
+await check("the worktree list marks the session's checkout, the main one and the agent pool", async () => {
+	const subprocess = fakeSubprocess(worktreeReply);
+	const list = await readWorktrees({ subprocess, executable: "/usr/bin/git", cwd: "/repo" });
+	assert.equal(list.kind, "ready");
+	assert.deepEqual(list.worktrees.map((entry) => [entry.name, entry.main, entry.current, entry.pool, entry.locked, entry.prunable]), [
+		["repo", true, true, false, false, false],
+		["dsh-1", false, false, true, true, false],
+		["gone", false, false, false, false, true]
+	]);
+	assert.equal(list.worktrees[0].subject, "main tip");
+	assert.equal(list.worktrees[0].changed, 2);
+	// A missing checkout gets no status read: there is nothing to run git in.
+	const statusCwds = subprocess.specs.filter((spec) => spec.argv[1] === "status").map((spec) => spec.cwd);
+	assert.deepEqual(statusCwds, ["/repo", "/repo/.agents/worktrees/dsh-1"]);
+	assert.equal(list.worktrees[2].changed, null);
+});
+
+await check("an old git without worktree list -z is read line by line", async () => {
+	const subprocess = fakeSubprocess((argv) => {
+		if (argv[0] === "worktree" && argv.includes("-z")) return { exitCode: 129, stderr: "unknown switch `z'" };
+		if (argv[0] === "worktree") return { stdout: WORKTREE_LIST.replaceAll("\0", "\n") };
+		return worktreeReply(argv);
+	});
+	const list = await readWorktrees({ subprocess, executable: "/usr/bin/git", cwd: "/repo" });
+	assert.equal(list.worktrees.length, 3);
+	assert.equal(list.worktrees[1].lockReason, "agent at work");
+});
+
+await check("worktree actions only target listed checkouts and never force", async () => {
+	const subprocess = fakeSubprocess(worktreeReply);
+	const deps = { subprocess, executable: "/usr/bin/git", cwd: "/repo" };
+	assert.equal((await applyWorktreeAction({ ...deps, action: "remove", path: "/etc" })).code, "unknown-worktree");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "remove", path: "/repo" })).code, "main-worktree");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "remove", path: "/repo/.agents/worktrees/dsh-1" })).code, "locked-worktree");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "lock", path: "/repo/.agents/worktrees/dsh-1" })).code, "already-locked");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "enter", path: "/gone" })).code, "missing-worktree");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "enter", path: "/repo" })).code, "already-here");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "rm -rf" })).code, "unknown-action");
+	const unlocked = await applyWorktreeAction({ ...deps, action: "unlock", path: "/repo/.agents/worktrees/dsh-1" });
+	assert.equal(unlocked.kind, "ready");
+	assert.ok(subprocess.specs.some((spec) => spec.argv.slice(1).join(" ") === "worktree unlock -- /repo/.agents/worktrees/dsh-1"));
+	await applyWorktreeAction({ ...deps, action: "prune" });
+	assert.ok(subprocess.specs.some((spec) => spec.argv.slice(1).join(" ") === "worktree prune"));
+	assert.ok(!subprocess.specs.some((spec) => spec.argv.includes("--force") || spec.argv.includes("-f")), "nothing is ever forced");
+	assert.deepEqual([...WORKTREE_ACTIONS].sort(), ["create", "enter", "lock", "prune", "remove", "unlock"]);
+});
+
+await check("entering and creating need the session's live agent and the DSH services", async () => {
+	const subprocess = fakeSubprocess(worktreeReply);
+	const deps = { subprocess, executable: "/usr/bin/git", cwd: "/repo" };
+	const target = "/repo/.agents/worktrees/dsh-1";
+	const set = [];
+	const agent = { id: "agent" };
+	const services = { agent: () => agent, workingDirectory: { set: async (who, path) => { set.push([who, path]); return path; } } };
+	assert.equal((await applyWorktreeAction({ ...deps, action: "enter", path: target })).code, "enter-unavailable");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "enter", path: target, services: { ...services, agent: () => undefined } })).code, "session-idle");
+	const entered = await applyWorktreeAction({ ...deps, action: "enter", path: target, services });
+	assert.equal(entered.kind, "ready");
+	assert.equal(entered.entered, target);
+	assert.deepEqual(set, [[agent, target]]);
+
+	assert.equal((await applyWorktreeAction({ ...deps, action: "create", services })).code, "create-unavailable");
+	const created = [];
+	const withPool = { ...services, worktrees: { create: async (who, request) => { created.push(request); return { path: "/repo/.agents/worktrees/fix" }; } } };
+	assert.equal((await applyWorktreeAction({ ...deps, action: "create", name: "-x", services: withPool })).code, "invalid-name");
+	assert.equal((await applyWorktreeAction({ ...deps, action: "create", from: "--evil", services: withPool })).code, "invalid-rev");
+	const made = await applyWorktreeAction({ ...deps, action: "create", name: "fix", from: "main", services: withPool });
+	assert.equal(made.entered, "/repo/.agents/worktrees/fix");
+	assert.deepEqual(created, [{ name: "fix", from: "main" }]);
+	const failing = { ...services, workingDirectory: { set: async () => { throw new Error("not a directory"); } } };
+	const failed = await applyWorktreeAction({ ...deps, action: "enter", path: target, services: failing });
+	assert.equal(failed.kind, "failed");
+	assert.match(failed.message, /not a directory/);
+	assert.deepEqual(worktreeCapabilities(withPool), { running: true, enter: true, create: true });
+	assert.deepEqual(worktreeCapabilities(undefined), { running: false, enter: false, create: false });
+});
+
+await check("branch names for new worktrees are checked before DSH sees them", () => {
+	for (const name of ["fix", "feature/login", "dsh-1.2"]) assert.equal(isSafeBranchName(name), true, name);
+	for (const name of ["", "-x", "a..b", "a//b", "a/", "x.lock", "a b", "a~1", "."]) assert.equal(isSafeBranchName(name), false, name);
+});
+
+await check("the worktree routes attach capabilities and validate the body", async () => {
+	const deps = handlerDeps({ subprocess: fakeSubprocess(worktreeReply), services: () => ({ agent: () => undefined }) });
+	const { json } = await call(worktreesResponse, `${WORKTREES_PATH}?sessionId=s1`, deps);
+	assert.equal(json.kind, "ready");
+	assert.deepEqual(json.actions, { running: false, enter: false, create: false });
+	const post = (body) => worktreeResponse(new Request(`${ORIGIN}${WORKTREE_PATH}?sessionId=s1`, { method: "POST", body }), deps);
+	assert.equal((await post("{")).status, 400);
+	assert.equal((await (await post(JSON.stringify({ action: "format" }))).json()).code, "unknown-action");
+	const refused = await (await post(JSON.stringify({ action: "enter", path: "/repo/.agents/worktrees/dsh-1" }))).json();
+	assert.equal(refused.code, "enter-unavailable");
+});
+
 // ── readRepoState / readBase ────────────────────────────────────────────────
 
 await check("the operation in progress is read from long-form status", async () => {
@@ -903,7 +1063,7 @@ await check("the blame route validates the path and answers the summary", async 
 
 // ── plugin wiring ───────────────────────────────────────────────────────────
 
-await check("apply claims ten authenticated routes, with generation separate from mutations", async () => {
+await check("apply claims twelve authenticated routes, with generation and worktrees separate from mutations", async () => {
 	const routes = [];
 	const ctx = {
 		subprocess: fakeSubprocess(() => ({})),
@@ -933,11 +1093,13 @@ await check("apply claims ten authenticated routes, with generation separate fro
 	assert.equal(MESSAGE_PATH, "/api/git.message");
 	assert.equal(CI_PATH, "/api/git.ci");
 	assert.equal(AUTH_PATH, "/api/git.auth");
-	assert.equal(routes.length, 10);
+	assert.equal(WORKTREES_PATH, "/api/git.worktrees");
+	assert.equal(WORKTREE_PATH, "/api/git.worktree");
+	assert.equal(routes.length, 12);
 
-	// Git mutations and paid model calls both require an explicit POST.
+	// Git mutations, worktree changes and paid model calls all require an explicit POST.
 	const writing = routes.filter((route) => route.methods.includes("POST"));
-	assert.deepEqual(writing.map((route) => route.path), ["/api/git.mutate", "/api/git.message"]);
+	assert.deepEqual(writing.map((route) => route.path), ["/api/git.mutate", "/api/git.worktree", "/api/git.message"]);
 
 	for (const route of routes) {
 		assert.ok(route.path.startsWith("/api/"), `route path must start with /api/: ${route.path}`);
@@ -945,7 +1107,7 @@ await check("apply claims ten authenticated routes, with generation separate fro
 		assert.equal(typeof route.fetch, "function");
 		assert.ok(["GET", "POST"].includes(route.methods[0]));
 	}
-	assert.equal(new Set(routes.map((route) => route.path)).size, 10, "no route may be claimed twice");
+	assert.equal(new Set(routes.map((route) => route.path)).size, 12, "no route may be claimed twice");
 });
 
 await check("model selection uses the next model, supports cold reads, and releases its observation", async () => {

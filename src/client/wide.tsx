@@ -17,7 +17,8 @@ import { ciDisplayState, ciInterval, useGitActions, useLiveLoad, useLoad } from 
 import { operationBanner, patchBody, patchParts, patchState, placeholder } from "./chrome";
 import { BlameView, changeSection, identityDetails, refTags, rowActions, timeLabel, trackText } from "./views";
 import { CIView, ciStatus, ciSummary, connectionMessage } from "./ci";
-import type { BlameLine, GitActions, Branch, CI, CICheck, Commit, History, Patch, ReflogEntry, Resource, Status, StatusReady, TreeNode, Translate, ViewProps } from "./types";
+import { WorktreeSection, branchWorktreeTag, linkedBadge, useWorktreeRunner } from "./worktrees";
+import type { BlameLine, GitActions, Branch, CI, CICheck, Commit, History, Patch, ReflogEntry, Resource, Status, StatusReady, TreeNode, Translate, ViewProps, Worktrees } from "./types";
 
 type ReactNodeLike = ReturnType<typeof h> | null;
 type Mode = "review" | "repository";
@@ -281,7 +282,7 @@ function commitCard(staged: number, identity: unknown, actions: GitActions, t: T
 }
 
 export function GitWideView(props: ViewProps) {
-	const { sessionId, useSessions, t, loadStatus, loadHistory, loadBranches, loadReflog, loadBlame, loadDiff, loadCI, loadAuth, askAI, generateMessage, mutate } = props;
+	const { sessionId, useSessions, t, loadStatus, loadHistory, loadBranches, loadReflog, loadBlame, loadDiff, loadCI, loadAuth, askAI, generateMessage, mutate, loadWorktrees, worktreeAction } = props;
 	const cwd = useSessions((sessions) => sessions.byId[sessionId]?.cwd);
 	const signal = useMountSignal();
 
@@ -307,6 +308,10 @@ export function GitWideView(props: ViewProps) {
 	};
 	const statusState: Resource<Status> | { phase: "no-workspace" } = cwd === undefined ? { phase: "no-workspace" } : status;
 	const ready: StatusReady | null = statusState.phase === "ready" && "value" in statusState && statusState.value?.kind === "ready" ? statusState.value : null;
+	// The checkout the answers belong to. The session's recorded directory can
+	// move into a worktree without its header's cwd changing, so every read and
+	// every selection is keyed on the repository the status actually found.
+	const where = `${cwd}:${ready?.repoRoot ?? ""}`;
 
 	// Review
 	const [selection, setSelection] = react.useState<Selection | null>(null);
@@ -341,23 +346,24 @@ export function GitWideView(props: ViewProps) {
 		setCIRemote("");
 		setAuthNonce(0);
 		setExpanded({});
-	}, [sessionId, cwd]);
+	}, [sessionId, where]);
 
 	const repository = mode === "repository" && ready !== null;
-	const [history] = useLoad(repository ? `history:${sessionId}:${cwd}:${dataNonce}` : null, () => loadHistory(sessionId, signal)) as [Resource<History>];
-	const [branches] = useLoad(repository ? `branches:${sessionId}:${cwd}:${dataNonce}` : null, () => loadBranches(sessionId, signal)) as [Resource<{ kind: string; branches?: Branch[] }>];
-	const [reflog] = useLoad(repository && list === "reflog" ? `reflog:${sessionId}:${cwd}:${dataNonce}` : null, () => loadReflog(sessionId, signal)) as [Resource<{ kind: string; entries?: ReflogEntry[] }>];
-	const [ci] = useLiveLoad(live && ready !== null ? `ci:${sessionId}:${cwd}:${ciRemote}:${dataNonce}` : null, (s: AbortSignal) => loadCI(sessionId, ciRemote, s), signal, ciInterval) as [Resource<CI>];
+	const [history] = useLoad(repository ? `history:${sessionId}:${where}:${dataNonce}` : null, () => loadHistory(sessionId, signal)) as [Resource<History>];
+	const [branches] = useLoad(repository ? `branches:${sessionId}:${where}:${dataNonce}` : null, () => loadBranches(sessionId, signal)) as [Resource<{ kind: string; branches?: Branch[] }>];
+	const [worktrees] = useLoad(repository ? `worktrees:${sessionId}:${where}:${dataNonce}` : null, () => loadWorktrees(sessionId, signal)) as [Resource<Worktrees | { kind: string }>];
+	const [reflog] = useLoad(repository && list === "reflog" ? `reflog:${sessionId}:${where}:${dataNonce}` : null, () => loadReflog(sessionId, signal)) as [Resource<{ kind: string; entries?: ReflogEntry[] }>];
+	const [ci] = useLiveLoad(live && ready !== null ? `ci:${sessionId}:${where}:${ciRemote}:${dataNonce}` : null, (s: AbortSignal) => loadCI(sessionId, ciRemote, s), signal, ciInterval) as [Resource<CI>];
 	const [auth] = useLoad(inspect?.kind === "ci" && authNonce > 0 ? `auth:${sessionId}:${ciRemote}:${authNonce}` : null, () => loadAuth(sessionId, ciRemote, signal)) as [Resource<unknown>];
 	const reviewing = mode === "review" && ready !== null && selection !== null;
 	const [patch] = useLiveLoad(
-		reviewing && pane === "diff" ? JSON.stringify([sessionId, cwd, selection.scope, selection.path, dataNonce]) : null,
+		reviewing && pane === "diff" ? JSON.stringify([sessionId, where, selection.scope, selection.path, dataNonce]) : null,
 		(s: AbortSignal) => loadDiff(sessionId, selection?.path ?? "", selection?.scope ?? "head", "", s),
 		signal, 3000, busy
 	) as [Resource<Patch>];
-	const [blame] = useLoad(reviewing && pane === "blame" ? `blame:${sessionId}:${selection.path}:${dataNonce}` : null, () => loadBlame(sessionId, selection?.path ?? "", signal)) as [Resource<unknown>];
+	const [blame] = useLoad(reviewing && pane === "blame" ? `blame:${sessionId}:${where}:${selection.path}:${dataNonce}` : null, () => loadBlame(sessionId, selection?.path ?? "", signal)) as [Resource<unknown>];
 	const inspectSha = inspect?.kind === "commit" ? inspect.commit.sha : null;
-	const [commitPatch] = useLoad(inspectSha !== null ? `commit:${sessionId}:${cwd}:${inspectSha}` : null, () => loadDiff(sessionId, "", "commit", inspectSha ?? "", signal)) as [Resource<Patch>];
+	const [commitPatch] = useLoad(inspectSha !== null ? `commit:${sessionId}:${where}:${inspectSha}` : null, () => loadDiff(sessionId, "", "commit", inspectSha ?? "", signal)) as [Resource<Patch>];
 
 	// The rail's files, in the order they are drawn: the order J and K walk.
 	const query = filter.trim().toLowerCase();
@@ -434,6 +440,10 @@ export function GitWideView(props: ViewProps) {
 		setDataNonce((n) => n + 1);
 		setNotice(null);
 	};
+	const worktreeRunner = useWorktreeRunner({ sessionId, signal, t, worktreeAction, setNotice, onDone: react.useCallback(() => {
+		setStatusNonce((n) => n + 1);
+		setDataNonce((n) => n + 1);
+	}, []) });
 	const copy = async (text: string, what: string) => {
 		if (await primitives.writeClipboard(text)) {
 			setCopied(what);
@@ -484,6 +494,7 @@ export function GitWideView(props: ViewProps) {
 				<primitives.IconBranchOutlineRegular className="gt_icon" />
 				<span className="gt_wBranch" title={ready?.branch ?? undefined}>{ready?.detached ? t("detached") : ready?.branch ?? "Git"}</span>
 				{ready?.unborn ? <primitives.Tag tone="neutral">{t("unborn")}</primitives.Tag> : null}
+				{linkedBadge(ready?.checkout, t)}
 				{base?.name && base.ahead > 0 ? <span className="gt_wNote">{t("aheadOfBase").replace("{n}", String(base.ahead)).replace("{base}", base.name)}</span> : null}
 				{ready ? <span className="gt_wRepoPath" title={ready.repoRoot}>{ready.repoRoot}</span> : null}
 			</div>
@@ -742,6 +753,7 @@ export function GitWideView(props: ViewProps) {
 					<span className="gt_refDot" aria-hidden="true" style={{ background: branchColor(branch.name) }} />
 					<span className="gt_name">{branch.name}</span>
 					{branch.current ? <primitives.Tag tone="success">{t("current")}</primitives.Tag> : null}
+					{branchWorktreeTag(branch, t)}
 					{trackCounts(branch, track)}
 				</button>
 			);
@@ -813,6 +825,7 @@ export function GitWideView(props: ViewProps) {
 			<aside className="gt_wRail" aria-label={t("view.branches")}>
 				<div className="gt_wRailBody">
 					{here}
+					<WorktreeSection state={worktrees} t={t} runner={worktreeRunner} disabled={busy} base={ready.detached ? null : ready.branch} />
 					<div className="gt_group">
 						<div className="gt_section">{t("localBranches")}<span className="gt_count">{locals.length || ""}</span></div>
 						{placeholder(branches, t) !== null ? <p className="gt_note">{placeholder(branches, t)}</p> : locals.length === 0 ? <p className="gt_note">{t("noBranches")}</p> : locals.map(branchRow)}

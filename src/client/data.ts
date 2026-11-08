@@ -219,7 +219,9 @@ export const ROUTES = {
 	mutate: "api/git.mutate",
 	message: "api/git.message",
 	ci: "api/git.ci",
-	auth: "api/git.auth"
+	auth: "api/git.auth",
+	worktrees: "api/git.worktrees",
+	worktree: "api/git.worktree"
 };
 
 /** Build a query string, dropping parameters the caller left unset. */
@@ -283,6 +285,16 @@ export async function write(route, sessionId, body, signal) {
 	} catch (error) {
 		return { ok: false, error: { code: "transport", message: String(error?.message ?? error) } };
 	}
+}
+
+/** Every checkout of the session's repository, and what the session may do with them. */
+export function readWorktrees(sessionId, signal) {
+	return read(ROUTES.worktrees, { sessionId }, signal);
+}
+
+/** One worktree action: enter, create, lock, unlock, remove or prune. */
+export function sendWorktreeAction(sessionId, body, signal) {
+	return write(ROUTES.worktree, sessionId, body, signal);
 }
 
 /** The git working-tree status for one session: identity, tree, operation, base. */

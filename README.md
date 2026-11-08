@@ -8,6 +8,7 @@ A Git panel for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 - CI status for GitHub, GitLab and Gitea; step details for GitHub Actions
 - Optional commit-message generation using the session's selected model
 - A wide **Git** tab beside Chat and Trajectory, with a Review mode (stage, commit, side-by-side diff) and a Repository mode (history, branches, CI)
+- Worktrees: follows the session into the worktree its agent works in, lists every checkout of the repository, and switches, creates, locks, removes or prunes them
 
 ## Install
 
@@ -28,6 +29,16 @@ dsh plugin --profile web remove dsh-gitview
 ## Placement
 
 Settings → General → **Git view placement** chooses the right sidebar, the conversation tab, or both (default). The choice is stored per browser, not per user or session.
+
+## Worktrees
+
+Git runs in the session's **effective** working directory: when the agent enters a worktree (DSH's `create_worktree` tool, or `working_directory`), the view follows it, and the header marks a linked worktree. On DSH 0.2.0 that directory is the session's original one.
+
+Repository mode and the sidebar's Branches view list every checkout: where this session works, the project directory, checkouts an agent created under `.agents/worktrees`, and locked or missing ones, with their changed files. A branch held by another checkout is tagged. From the list:
+
+- **Switch here** moves this session's working directory to that checkout, as the agent's own tools do; the agent is told. It needs a running session.
+- **New** creates a branch in a new checkout and switches to it through DSH's worktree service, which the **Change requests & worktrees** plugin provides. Uncommitted changes are not copied; from inside a linked worktree, DSH nests the new checkout in it.
+- **Lock**, **Unlock**, **Remove** and **Prune** run the matching `git worktree` command. Remove and Prune ask first. Nothing is forced: Git refuses to remove a checkout with changes, the main checkout and the session's own cannot be removed, and branches are kept.
 
 ## CI and AI
 

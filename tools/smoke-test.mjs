@@ -218,7 +218,7 @@ await check("the body declares no undeclared props", () => {
 	const face = recorded.bodies[0].spec.inject("session-1", undefined);
 	assert.deepEqual(
 		Object.keys(face).sort(),
-		["askAI", "generateMessage", "loadAuth", "loadBlame", "loadBranches", "loadCI", "loadDiff", "loadHistory", "loadReflog", "loadStatus", "mutate"],
+		["askAI", "generateMessage", "loadAuth", "loadBlame", "loadBranches", "loadCI", "loadDiff", "loadHistory", "loadReflog", "loadStatus", "loadWorktrees", "mutate", "worktreeAction"],
 		"the injected business share is the whole data channel"
 	);
 	for (const [name, value] of Object.entries(face)) {
@@ -281,6 +281,8 @@ await check("loadHistory, loadBranches and loadReflog call their own routes", as
 	assert.match(fetched.at(-1).url, /^api\/git\.branches\?/);
 	await face.loadReflog("session-1");
 	assert.match(fetched.at(-1).url, /^api\/git\.reflog\?/);
+	await face.loadWorktrees("session-1");
+	assert.match(fetched.at(-1).url, /^api\/git\.worktrees\?/);
 });
 
 await check("mutate POSTs the action, and a refusal keeps the payload's code", async () => {
@@ -538,7 +540,7 @@ await check("query drops every parameter the caller left unset", () => {
 
 await check("the view list and route table are the ones the panel uses", () => {
 	assert.deepEqual([...VIEWS], ["status", "history", "branches", "blame", "reflog", "ci"]);
-	assert.deepEqual(Object.keys(ROUTES).sort(), ["auth", "blame", "branches", "ci", "diff", "history", "message", "mutate", "reflog", "status"]);
+	assert.deepEqual(Object.keys(ROUTES).sort(), ["auth", "blame", "branches", "ci", "diff", "history", "message", "mutate", "reflog", "status", "worktree", "worktrees"]);
 	for (const route of Object.values(ROUTES)) {
 		assert.ok(!route.startsWith("/"), `routes must be document-relative: ${route}`);
 		assert.ok(route.startsWith("api/"), `routes must carry the /api/ prefix: ${route}`);
