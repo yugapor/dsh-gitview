@@ -3,6 +3,7 @@ import { primitives, h } from "./deps";
 import { GROUPS, LANE_INSET, LANE_W, REBASE_ACTION_PREFIX, countsText, directoryPaths, flatten, sliceTree, stateOf, toggle } from "./model";
 import { branchColor, colorGraph, laneGutter } from "./graph";
 import { placeholder } from "./chrome";
+import { branchWorktreeTag } from "./worktrees";
 
 /** The commit message box and its button. */
 export function identityDetails(identity, t) {
@@ -538,6 +539,7 @@ export function branchRow(branch, t, key) {
 		h("div", { className: "gt_subject" }, branch.name),
 		h("div", { className: "gt_meta" },
 		branch.current ? h(primitives.Tag, { tone: "success" }, t("current")) : null,
+		branchWorktreeTag(branch, t),
 		// The base branch is what the History view marks against, so name it.
 		branch.name === "main" || branch.name === "master" ? h(primitives.Tag, { tone: "neutral" }, t("base")) : null,
 		// Naming the upstream is what makes the counts beside it mean anything.

@@ -15,11 +15,14 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	applyMutation,
+	applyWorktreeAction,
+	cwdFor,
+	readWorktrees,
 	generateCommitMessage,
 	readBlame,
 	readBranches,
@@ -533,5 +536,89 @@ await check("identity honors included configuration without writing back to it",
 		assert.equal(result.config.name.value, "Included Name"); assert.equal(result.config.name.scope, "local");
 		assert.match(result.config.email.origin, /identity\.cfg$/); assert.equal(result.author.email, "included@example.test");
 	} finally { rmSync(identityRepo.dir, { recursive: true, force: true }); }
+});
+await check("worktrees are listed, followed, locked, removed and pruned by real git", async () => {
+	const wt = fixture();
+	const pool = join(wt.dir, ".agents", "worktrees");
+	try {
+		wt.put("a.txt", "a\n");
+		wt.git("add", "-A");
+		wt.git("commit", "-qm", "base");
+		// DSH's worktree service writes this ignore file when it creates the pool.
+		mkdirSync(pool, { recursive: true });
+		wt.put(".agents/worktrees/.gitignore", "*\n");
+		wt.git("worktree", "add", "-q", "-b", "dsh-agent", join(pool, "dsh-agent"));
+		wt.git("worktree", "add", "-q", "-b", "side", `${wt.dir}-side`);
+		writeFileSync(join(pool, "dsh-agent", "work.txt"), "agent work\n");
+
+		const list = await readWorktrees(deps(wt.dir));
+		assert.equal(list.kind, "ready");
+		const byName = (value, name) => value.worktrees.find((entry) => entry.name === name);
+		assert.equal(byName(list, "dsh-agent").pool, true);
+		assert.equal(byName(list, "dsh-agent").changed, 1, "the agent's untracked file counts");
+		assert.equal(list.worktrees[0].main, true);
+		assert.equal(list.worktrees[0].current, true);
+		assert.equal(list.worktrees[0].changed, 0, "the pool's ignore file keeps the main checkout clean");
+
+		// The session's directory moved into the worktree: the projection says so,
+		// the header does not, and every read follows the projection.
+		const ctx = {
+			sessionQuery: { observeSession: async () => ({ projections: { values: { workingDirectory: join(pool, "dsh-agent") } } }) },
+			sessions: { get: () => ({ header: { cwd: wt.dir } }) },
+			get: () => undefined
+		};
+		const cwd = await cwdFor(ctx, "s1");
+		const status = await readStatus(deps(cwd));
+		assert.equal(status.repoRoot, join(pool, "dsh-agent"));
+		assert.equal(status.branch, "dsh-agent");
+		assert.deepEqual(status.checkout, { linked: true, mainRoot: wt.dir });
+		assert.equal(byName(await readWorktrees(deps(cwd)), "dsh-agent").current, true);
+
+		const side = byName(list, `${wt.dir.split("/").pop()}-side`).path;
+		const locked = await applyWorktreeAction({ ...deps(wt.dir), action: "lock", path: side });
+		assert.equal(locked.kind, "ready");
+		assert.equal(byName(locked.worktrees, `${wt.dir.split("/").pop()}-side`).locked, true);
+		assert.equal((await applyWorktreeAction({ ...deps(wt.dir), action: "remove", path: side })).code, "locked-worktree");
+		assert.equal((await applyWorktreeAction({ ...deps(wt.dir), action: "unlock", path: side })).kind, "ready");
+
+		// Git refuses a checkout with an untracked file; nothing here forces it.
+		const dirty = await applyWorktreeAction({ ...deps(wt.dir), action: "remove", path: join(pool, "dsh-agent") });
+		assert.equal(dirty.kind, "failed");
+		assert.match(dirty.message, /untracked|modified/);
+
+		const removed = await applyWorktreeAction({ ...deps(wt.dir), action: "remove", path: side });
+		assert.equal(removed.kind, "ready");
+		assert.equal(removed.worktrees.worktrees.length, 2);
+		assert.match(wt.git("branch", "--list", "side"), /side/, "the branch is kept");
+
+		rmSync(join(pool, "dsh-agent"), { recursive: true, force: true });
+		const stale = await readWorktrees(deps(wt.dir));
+		assert.equal(byName(stale, "dsh-agent").prunable, true);
+		const pruned = await applyWorktreeAction({ ...deps(wt.dir), action: "prune" });
+		assert.equal(pruned.worktrees.worktrees.length, 1);
+	} finally {
+		spawnSync("git", ["worktree", "remove", "--force", `${wt.dir}-side`], { cwd: wt.dir });
+		rmSync(`${wt.dir}-side`, { recursive: true, force: true });
+		rmSync(wt.dir, { recursive: true, force: true });
+	}
+});
+
+await check("the branch list names the checkout each branch is in", async () => {
+	const wt = fixture();
+	try {
+		wt.put("a.txt", "a\n");
+		wt.git("add", "-A");
+		wt.git("commit", "-qm", "base");
+		wt.git("worktree", "add", "-q", "-b", "elsewhere", `${wt.dir}-elsewhere`);
+		const branches = await readBranches(deps(wt.dir));
+		const find = (name) => branches.branches.find((branch) => branch.name === name);
+		assert.equal(find("main").worktree, wt.dir);
+		assert.equal(find("elsewhere").worktree, `${wt.dir}-elsewhere`);
+		assert.equal(find("elsewhere").subject, "base");
+	} finally {
+		spawnSync("git", ["worktree", "remove", "--force", `${wt.dir}-elsewhere`], { cwd: wt.dir });
+		rmSync(`${wt.dir}-elsewhere`, { recursive: true, force: true });
+		rmSync(wt.dir, { recursive: true, force: true });
+	}
 });
 console.log(`\nPASS  ${passed} checks`);

@@ -5,6 +5,7 @@ import { ciInterval, readLayout, saveLayout, useGitActions, useLiveLoad, useLoad
 import { diffPane, operationBanner, placeholder, viewTab } from "./chrome";
 import { BlameView, BranchesView, HistoryView, ReflogView, StatusView } from "./views";
 import { CIView, ciSummary } from "./ci";
+import { WorktreeSection, linkedBadge, useWorktreeRunner } from "./worktrees";
 
 /** This implementation's identity in the tab system, and its body's slot key. */
 export const TAB_ID = "dsh-gitview";
@@ -63,7 +64,9 @@ export function GitTreeBody({
 	loadAuth,
 	askAI,
 	generateMessage,
-	mutate
+	mutate,
+	loadWorktrees,
+	worktreeAction
 }) {
 	const { tab } = useTabInfo();
 	const cwd = useSessions((sessions) => sessions.byId[sessionId]?.cwd);
@@ -117,24 +120,31 @@ export function GitTreeBody({
 		setStatus({ phase: "ready", key: statusKey, value, updatedAt: Date.now() });
 		setDataNonce((n) => n + 1);
 	};
-	const [history] = useLoad(view === "history" ? `history:${sessionId}:${cwd}:${dataNonce}` : null, () =>
+	// Keyed on the repository the status found as well as the session's cwd: the
+	// session's recorded directory can move into a worktree under the same header.
+	const root = status.value?.kind === "ready" ? status.value.repoRoot : "";
+	const where = `${cwd}:${root}`;
+	const [history] = useLoad(view === "history" ? `history:${sessionId}:${where}:${dataNonce}` : null, () =>
 		loadHistory(sessionId, tab.signal)
 	);
-	const [branches] = useLoad(view === "branches" ? `branches:${sessionId}:${cwd}:${dataNonce}` : null, () =>
+	const [branches] = useLoad(view === "branches" ? `branches:${sessionId}:${where}:${dataNonce}` : null, () =>
 		loadBranches(sessionId, tab.signal)
 	);
-	const [reflog] = useLoad(view === "reflog" ? `reflog:${sessionId}:${cwd}:${dataNonce}` : null, () =>
+	const [worktrees] = useLoad(view === "branches" ? `worktrees:${sessionId}:${where}:${dataNonce}` : null, () =>
+		loadWorktrees(sessionId, tab.signal)
+	);
+	const [reflog] = useLoad(view === "reflog" ? `reflog:${sessionId}:${where}:${dataNonce}` : null, () =>
 		loadReflog(sessionId, tab.signal)
 	);
 	// A path is required before there is anything to ask for, so the key stays
 	// null until one has been chosen.
 	const [blame] = useLoad(
-		view === "blame" && blamePath !== "" ? `blame:${sessionId}:${blamePath}:${dataNonce}` : null,
+		view === "blame" && blamePath !== "" ? `blame:${sessionId}:${where}:${blamePath}:${dataNonce}` : null,
 		() => loadBlame(sessionId, blamePath, tab.signal)
 	);
-	const [ci] = useLiveLoad(status.value?.kind === "ready" && cwd !== undefined ? `ci:${sessionId}:${cwd}:${ciRemote}:${dataNonce}` : null,
+	const [ci] = useLiveLoad(status.value?.kind === "ready" && cwd !== undefined ? `ci:${sessionId}:${where}:${ciRemote}:${dataNonce}` : null,
 		(signal) => loadCI(sessionId, ciRemote, signal), tab.signal, ciInterval, tab.visible === false);
-	const [patch] = useLiveLoad(detail ? JSON.stringify([sessionId, cwd, detail.scope, detail.path, detail.rev, dataNonce]) : null,
+	const [patch] = useLiveLoad(detail ? JSON.stringify([sessionId, where, detail.scope, detail.path, detail.rev, dataNonce]) : null,
 		(signal) => loadDiff(sessionId, detail.path, detail.scope, detail.rev, signal), tab.signal, detail?.scope === "commit" ? Infinity : 3000, busy || tab.visible === false);
 	const [auth] = useLoad(view === "ci" && authNonce > 0 ? `auth:${sessionId}:${ciRemote}:${authNonce}` : null,
 		() => loadAuth(sessionId, ciRemote, tab.signal));
@@ -151,11 +161,13 @@ export function GitTreeBody({
 		setNotice(null);
 	}, []);
 
+	const worktreeRunner = useWorktreeRunner({ sessionId, signal: tab.signal, t, worktreeAction, setNotice, onDone: refresh });
+
 	// The refresh command the sidebar's own chrome and shortcuts invoke.
 	react.useEffect(() => tab.actions.bindCommands({ refresh }), [tab.actions, refresh]);
 
 	// A selected path belongs to one session, repository and view.
-	react.useEffect(() => setDetail(null), [sessionId, cwd, view]);
+	react.useEffect(() => setDetail(null), [sessionId, where, view]);
 	react.useEffect(() => setHunk(-1), [detail?.scope, detail?.path, detail?.rev]);
 
 	// A path is relative to one repository, so a different session starts empty
@@ -167,7 +179,7 @@ export function GitTreeBody({
 		setAuthNonce(0);
 		setFilters({});
 		setExpanded({});
-	}, [sessionId, cwd]);
+	}, [sessionId, where]);
 
 	/** Load a patch into the pane below the list. */
 	const openDiff = react.useCallback(
@@ -212,7 +224,8 @@ export function GitTreeBody({
 			h("div", { className: "gt_branch" },
 				h(primitives.IconBranchOutlineRegular, { className: "gt_icon" }),
 				h("span", { className: "gt_name", title: ready?.branch }, ready?.detached ? t("detached") : ready?.branch ?? "Git"),
-				ready?.unborn ? h(primitives.Tag, { tone: "neutral" }, t("unborn")) : null),
+				ready?.unborn ? h(primitives.Tag, { tone: "neutral" }, t("unborn")) : null,
+				linkedBadge(ready?.checkout, t)),
 			ready === null ? null : h("div", { className: "gt_repoPath", title: ready.repoRoot }, ready.repoRoot),
 			ready?.base?.ahead > 0 ? h("div", { className: "gt_meta" }, t("aheadOfBase").replace("{n}", String(ready.base.ahead)).replace("{base}", ready.base.name)) : null),
 		ci.value ? h(primitives.Button, { variant: "ghost", size: "sm", onClick: () => setView("ci"), title: ci.pollError ? t("ci.stale") : ci.updatedAt ? t("lastChecked").replace("{time}", new Date(ci.updatedAt).toLocaleTimeString()) : t("view.ci"),
@@ -263,7 +276,10 @@ export function GitTreeBody({
 			onOpenCommit: (commit) => openDiff("commit", "", commit.sha, `${commit.short} ${commit.subject}`, commit.sha)
 		});
 	} else if (view === "branches") {
-		content = h(BranchesView, { key: "branches", state: branches, t, filter });
+		// One scroll area for both lists, so the worktrees scroll away with the branches.
+		content = h("div", { key: "branches", className: "gt_wtBranches" },
+			h(WorktreeSection, { state: worktrees, t, runner: worktreeRunner, disabled: busy, base: ready.detached ? null : ready.branch, compact: true }),
+			h(BranchesView, { state: branches, t, filter }));
 	} else if (view === "blame") {
 		content = h(BlameView, {
 			key: "blame",

@@ -3,13 +3,14 @@ import "./styles";
 import { NS, en, ja } from "./locales";
 import { GROUPS, VIEWS, countsText, directoryPaths, flatten, sliceTree, stateOf } from "./model";
 import { branchColor, colorGraph, laneGutter } from "./graph";
-import { ROUTES, ciDisplayState, ciInterval, ciOverdue, query, read, readBlame, readBranches, readDiff, readHistory, readReflog, readStatus, sendMutation, write } from "./data";
+import { ROUTES, ciDisplayState, ciInterval, ciOverdue, query, read, readBlame, readBranches, readDiff, readHistory, readReflog, readStatus, readWorktrees, sendMutation, sendWorktreeAction, write } from "./data";
 import { PatchHunk, diffPane, operationBanner, patchParts, placeholder, splitHunk } from "./chrome";
 import { BlameView, BranchesView, HistoryView, ReflogView, StatusView, changeSection, commitBox, identityDetails, treeRows } from "./views";
 import { CIView } from "./ci";
 import { GitTreeBody, TAB_ID, gitTreeDefinition } from "./sidebar";
 import { GitWideView, fileChunks, reveal } from "./wide";
 import { PlacementRow, placementStore } from "./settings";
+import { WorktreeSection, branchWorktreeTag, linkedBadge, worktreeTitle } from "./worktrees";
 
 /**
  * Host-side services this plugin waits for.
@@ -61,6 +62,8 @@ function apply(ctx) {
 		loadReflog: (sessionId, signal) => readReflog(sessionId, signal),
 		loadBlame: (sessionId, path, signal) => readBlame(sessionId, path, signal),
 		mutate: (sessionId, body, signal) => sendMutation(sessionId, body, signal),
+		loadWorktrees: (sessionId, signal) => readWorktrees(sessionId, signal),
+		worktreeAction: (sessionId, body, signal) => sendWorktreeAction(sessionId, body, signal),
 		generateMessage: (sessionId, language, signal) => write(ROUTES.message, sessionId, { language }, signal)
 	};
 
@@ -151,5 +154,9 @@ export const __internals = {
 	GitWideView,
 	fileChunks,
 	reveal,
-	PlacementRow
+	PlacementRow,
+	WorktreeSection,
+	linkedBadge,
+	branchWorktreeTag,
+	worktreeTitle
 };

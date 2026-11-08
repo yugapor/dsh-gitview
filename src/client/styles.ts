@@ -161,7 +161,7 @@ export const CSS = `
 .gt_wView { container: gt-view / inline-size; overflow: hidden; box-sizing: border-box; height: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; flex: auto; color: var(--dsw-alias-label-primary); font-size: var(--dsh-content-font-size-secondary, 13px); line-height: 1.5; }
 .gt_wHead { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 8px 12px 8px 16px; border-bottom: .5px solid var(--dsw-alias-border-l2); }
 .gt_wRepo { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.gt_wBranch { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.gt_wBranch { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; max-width: 60%; min-width: 0; }
 .gt_wNote { color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxs-12); white-space: nowrap; flex: none; }
 .gt_wRepoPath { color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxs-12); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 2 auto; }
 .gt_wHeadEnd { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
@@ -169,7 +169,7 @@ export const CSS = `
 
 .gt_wReview, .gt_wRepository { flex: 1 1 auto; min-height: 0; display: grid; position: relative; }
 .gt_wReview { grid-template-columns: minmax(248px, 300px) minmax(0, 1fr); }
-.gt_wRepository { grid-template-columns: minmax(208px, 248px) minmax(0, 1fr) auto; }
+.gt_wRepository { grid-template-columns: minmax(224px, 272px) minmax(0, 1fr) auto; }
 .gt_wRail { min-height: 0; min-width: 0; display: flex; flex-direction: column; border-right: .5px solid var(--dsw-alias-border-l2); }
 .gt_wRailHead { flex: none; display: flex; align-items: center; gap: 2px; padding: 12px 8px 4px 16px; }
 .gt_wRailTitle { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; }
@@ -286,6 +286,35 @@ export const CSS = `
 .gt_setSelector { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px; border: none; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
 .gt_setSelector:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .gt_setSelector:focus-visible { outline: 2px solid var(--dsw-alias-link); outline-offset: 2px; }
+.gt_wtGroup .gt_section > button { margin-left: 2px; padding: 0 6px; min-height: 22px; font: var(--dsw-font-xxxs-11); }
+.gt_wtGroup .gt_section .gt_count { margin-right: 2px; }
+.gt_wtRow { align-items: flex-start; cursor: default; padding-top: 6px !important; padding-bottom: 6px !important; }
+.gt_wtRow[data-missing=true] .gt_name { color: var(--dsw-alias-label-tertiary); text-decoration: line-through; }
+.gt_wtIcon { flex: none; display: inline-flex; padding-top: 2px; color: var(--dsw-alias-label-secondary); }
+.gt_wtRow[data-current=true] .gt_wtIcon { color: var(--dsw-alias-link); }
+.gt_wtBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gt_wtLine { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.gt_wtTitle { flex-wrap: wrap; row-gap: 2px; }
+.gt_wtLine > .gt_name { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.gt_wtMeta { color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.gt_wtDir, .gt_wtSubject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt_wtSubject { flex: 1; color: var(--dsw-alias-label-secondary); }
+.gt_wtState { flex: none; margin-left: auto; display: inline-flex; gap: 6px; font-variant-numeric: tabular-nums; }
+.gt_wtActions { display: none; flex-wrap: wrap; gap: 2px; margin: 2px 0 0 -6px; }
+.gt_wtActions button { padding: 0 6px; min-height: 22px; font: var(--dsw-font-xxxs-11); }
+.gt_wtRow:hover .gt_wtActions, .gt_wtRow:focus-within .gt_wtActions { display: flex; }
+.gt_wtConfirm { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; font: var(--dsw-font-xxs-12); color: var(--dsw-alias-label-primary); }
+.gt_wtConfirm button { padding: 0 8px; min-height: 22px; font: var(--dsw-font-xxxs-11); }
+.gt_wtSectionConfirm { padding: 4px 8px 6px; }
+.gt_wtForm { display: flex; flex-direction: column; gap: 6px; margin: 2px 4px 8px; padding: 8px; border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); }
+.gt_wtField { display: flex; flex-direction: column; gap: 2px; font: var(--dsw-font-xxxs-11); color: var(--dsw-alias-label-secondary); }
+.gt_wtField .gt_input { padding: 5px 8px; font: var(--dsw-font-xxs-12); }
+.gt_wtForm .gt_note { margin: 0; padding: 0; }
+.gt_wtFormActions { display: flex; gap: 4px; }
+.gt_wtBadge { display: inline-flex; flex: none; }
+.gt_wtBranches { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
+.gt_wtBranches > .gt_wtGroup { flex: none; margin: 0 10px 8px; }
+.gt_wtBranches > .gt_body { flex: none; overflow: visible; }
 `;
 
 /** The document this bundle is running in, when there is one. */

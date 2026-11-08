@@ -21,6 +21,9 @@ import {
 	parseRepoState,
 	parseStatusZ,
 	parseTrack,
+	parseWorktrees,
+	inWorktreePool,
+	lastSegment,
 	summarize,
 	summarizeBlame
 } from "../lib/git.js";
@@ -43,8 +46,8 @@ const logRecord = (sha, short, parents, author, email, date, decoration, subject
 const logStream = (...recs) => recs.join("\u001e") + "\u001e";
 
 /** One `for-each-ref` record, in BRANCH_FORMAT field order. */
-const branchRecord = (full, name, short, head, upstream, track, date, subject) =>
-	[full, name, short, head, upstream, track, date, subject].join("\u001f");
+const branchRecord = (full, name, short, head, upstream, track, date, subject, worktree = "") =>
+	[full, name, short, head, upstream, track, date, worktree, subject].join("\u001f");
 
 /** A whole `for-each-ref` stream. */
 const branchStream = (...recs) => recs.join("\u001e") + "\u001e";
@@ -336,6 +339,50 @@ check("a branch whose upstream was deleted reports gone", () => {
 	));
 	assert.equal(branches[0].gone, true);
 	assert.equal(branches[0].upstream, "origin/stale");
+});
+
+check("a branch checked out in a worktree carries that path, and its subject survives", () => {
+	const branches = parseBranches(branchStream(
+		branchRecord("refs/heads/main", "main", "aaaaaaa", "*", "", "", "", "head", "/repo"),
+		branchRecord("refs/heads/dsh-1", "dsh-1", "bbbbbbb", " ", "", "", "", "agent: fix it", "/repo/.agents/worktrees/dsh-1"),
+		branchRecord("refs/heads/idle", "idle", "ccccccc", " ", "", "", "", "parked")
+	));
+	assert.deepEqual(branches.map((branch) => [branch.name, branch.worktree, branch.subject]), [
+		["main", "/repo", "head"],
+		["dsh-1", "/repo/.agents/worktrees/dsh-1", "agent: fix it"],
+		["idle", null, "parked"]
+	]);
+});
+
+check("worktree lists parse with and without -z, keeping git's order", () => {
+	const lines = [
+		"worktree /repo", "HEAD aaaa", "branch refs/heads/main", "",
+		"worktree /repo/.agents/worktrees/dsh-1", "HEAD bbbb", "branch refs/heads/feature/x", "locked", "",
+		"worktree /old", "HEAD cccc", "detached", "prunable gitdir file points to non-existent location", ""
+	];
+	for (const [raw, nul] of [[lines.join("\0") + "\0", true], [lines.join("\n") + "\n", false]]) {
+		const list = parseWorktrees(raw, nul);
+		assert.deepEqual(list.map((entry) => entry.path), ["/repo", "/repo/.agents/worktrees/dsh-1", "/old"]);
+		assert.equal(list[1].branch, "feature/x");
+		assert.equal(list[1].locked, true);
+		assert.equal(list[1].lockReason, null);
+		assert.equal(list[2].detached, true);
+		assert.equal(list[2].prunable, true);
+		assert.match(list[2].prunableReason, /non-existent/);
+	}
+	// A path with a newline survives only the NUL form, which is why it is preferred.
+	assert.equal(parseWorktrees("worktree /a\nb\0HEAD dddd\0bare\0\0", true)[0].path, "/a\nb");
+	assert.equal(parseWorktrees("worktree /bare.git\0bare\0\0")[0].bare, true);
+	assert.deepEqual(parseWorktrees(""), []);
+});
+
+check("the DSH worktree pool and path names are recognized on either separator", () => {
+	assert.equal(inWorktreePool("/repo/.agents/worktrees/dsh-1"), true);
+	assert.equal(inWorktreePool("C:\\repo\\.agents\\worktrees\\dsh-1\\"), true);
+	assert.equal(inWorktreePool("/repo/.agents/worktrees"), false);
+	assert.equal(inWorktreePool("/repo-side"), false);
+	assert.equal(lastSegment("/repo/.agents/worktrees/dsh-1/"), "dsh-1");
+	assert.equal(lastSegment("C:\\work\\repo"), "repo");
 });
 
 check("reflog subjects are split into an action and its detail", () => {
